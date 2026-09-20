@@ -6,4 +6,5 @@ import { useAuthStore } from '@/stores/auth'
 import { setUnauthorizedCallback } from '@/api/http'
 import { resolveLegacyLocation } from '@/utils/legacy-route'
 import './styles/base.css'
+import 'element-plus/es/components/message/style/css'
 const app=createApp(App); const pinia=createPinia(); app.use(pinia); const authStore=useAuthStore(pinia); authStore.restore(); setUnauthorizedCallback(()=>authStore.clearSession()); const legacy=resolveLegacyLocation(window.location.pathname,window.location.search); if(legacy) window.history.replaceState({},'',legacy); const router=createAppRouter(); app.use(router); app.mount('#app')

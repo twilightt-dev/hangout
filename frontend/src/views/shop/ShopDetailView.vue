@@ -16,7 +16,28 @@ const route = useRoute(); const router = useRouter(); const auth = useAuthStore(
 const shopId = computed(() => Number(route.params.id)); const images = computed(() => shop.value?.images?.split(',').map((item) => item.trim()).filter(Boolean) || []); const scoreText = computed(() => Number.isFinite(shop.value?.score) ? (Number(shop.value?.score) / 10).toFixed(1) : '暂无评分')
 function dateValue(value: string | undefined) { return value ? new Date(value.replace(' ', 'T')).getTime() : NaN }
 async function load() { const currentEpoch = ++requestEpoch; shop.value = undefined; vouchers.value = []; claimingId.value = undefined; errorMessage.value = ''; if (!Number.isInteger(shopId.value) || shopId.value < 1) { state.value = 'error'; errorMessage.value = '门店地址无效，请返回后重新选择。'; return } const id = shopId.value; state.value = 'loading'; try { const [shopResult, voucherResult] = await Promise.all([getShop(id), getVouchers(id)]); if (currentEpoch !== requestEpoch) return; if (!shopResult) { state.value = 'error'; errorMessage.value = '门店不存在或已下线，请稍后重试。'; return } shop.value = shopResult; vouchers.value = voucherResult; state.value = 'ready' } catch { if (currentEpoch !== requestEpoch) return; state.value = 'error'; errorMessage.value = '门店详情加载失败，请稍后重试。' } }
-async function claim(voucher: Voucher) { if (!auth.isAuthenticated) { await router.push({ name: 'login', query: { redirect: route.fullPath } }); return } const now = Date.now(); const begins = dateValue(voucher.beginTime); const ends = dateValue(voucher.endTime); if (Number.isFinite(begins) && now < begins) { ElMessage.error('活动尚未开始'); return } if (Number.isFinite(ends) && now > ends) { ElMessage.error('活动已结束'); return } if (voucher.stock !== undefined && voucher.stock < 1) { ElMessage.error('优惠券已抢完'); return } if (voucher.id === undefined) { ElMessage.error('优惠券信息无效'); return } claimingId.value = voucher.id; try { const orderId = await seckillVoucher(voucher.id); ElMessage.success(`领取成功，订单号：${orderId}`) } catch { ElMessage.error('领取未成功，请稍后重试') } finally { claimingId.value = undefined } }
+async function claim(voucher: Voucher) {
+  if (!auth.isAuthenticated) {
+    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  const now = Date.now()
+  const begins = dateValue(voucher.beginTime)
+  const ends = dateValue(voucher.endTime)
+  if (Number.isFinite(begins) && now < begins) { ElMessage.error('活动尚未开始'); return }
+  if (Number.isFinite(ends) && now > ends) { ElMessage.error('活动已结束'); return }
+  if (voucher.stock !== undefined && voucher.stock < 1) { ElMessage.error('优惠券已抢完'); return }
+  if (voucher.id === undefined) { ElMessage.error('优惠券信息无效'); return }
+  claimingId.value = voucher.id
+  try {
+    const orderId = await seckillVoucher(voucher.id)
+    ElMessage.success(`领取成功，订单号：${orderId}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : '领取未成功，请稍后重试')
+  } finally {
+    claimingId.value = undefined
+  }
+}
 void load()
 watch(shopId, () => { void load() })
 defineExpose({ claim })

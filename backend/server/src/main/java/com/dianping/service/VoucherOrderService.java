@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 
 
 public interface VoucherOrderService extends IService<VoucherOrder> {
-    public Result<Long> seckillVoucher(@PathVariable("id") Long voucherId);
+    public Result<Long> seckillVoucher( Long voucherId);
 
-    public  Result<Long> createVoucherOrder(Long voucherId);
+
 }

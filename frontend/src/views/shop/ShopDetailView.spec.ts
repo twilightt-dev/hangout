@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ShopDetailView from './ShopDetailView.vue'
+import { ApiError } from '@/api/http'
 
 const { getShop, getVouchers, seckillVoucher, push, messageError, authState } = vi.hoisted(() => ({
   getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
@@ -109,6 +110,33 @@ describe('ShopDetailView', () => {
 
     expect(wrapper.text()).toContain('门店地址无效，请返回后重新选择。')
     expect(wrapper.text()).not.toContain('旧门店')
+  })
+
+  it.each(['活动未开始！', '活动已结束！', '优惠券不存在！', '库存不足！', '不允许重复下单', '用户已经购买过一次！'])(
+    '领取失败时弹出后端原始信息：%s，并恢复按钮', async (message) => {
+      authState.authenticated = true
+      getVouchers.mockResolvedValue([{ id: 17, title: '限时券', type: 1, stock: 1 }])
+      seckillVoucher.mockRejectedValueOnce(new ApiError(message, 0))
+      const wrapper = mount(ShopDetailView)
+      await flushPromises()
+      await wrapper.get('.voucher-card__claim').trigger('click')
+      await flushPromises()
+
+      expect(messageError).toHaveBeenCalledExactlyOnceWith(message)
+      expect(wrapper.get('.voucher-card__claim').attributes('disabled')).toBeUndefined()
+      expect(wrapper.get('.voucher-card__claim').text()).toBe('立即秒杀')
+      wrapper.unmount()
+    },
+  )
+
+  it('未知异常仍有兜底提示', async () => {
+    authState.authenticated = true
+    seckillVoucher.mockRejectedValueOnce(null)
+    const wrapper = mount(ShopDetailView)
+    await flushPromises()
+    await wrapper.vm.claim({ id: 17, stock: 1 })
+    expect(messageError).toHaveBeenCalledExactlyOnceWith('领取未成功，请稍后重试')
+    wrapper.unmount()
   })
 
   it('点击真实优惠券卡片会进入领取接口', async () => {

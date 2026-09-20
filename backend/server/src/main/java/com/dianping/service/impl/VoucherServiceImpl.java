@@ -16,19 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.Resource;
 import java.util.List;
 
-/**
- * <p>
- *  服务实现类
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
+
 @Service
 public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> implements VoucherService {
 
-    @Autowired
-    private SeckillVoucherService seckillVoucherService;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
@@ -40,23 +31,6 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
         return Result.success(vouchers);
     }
 
-    @Override
-    @Transactional
-    public void addSeckillVoucher(Voucher voucher) {
-        // 保存优惠券
-        save(voucher);
-        // 保存秒杀信息
-        SeckillVoucher seckillVoucher = new SeckillVoucher();
-        seckillVoucher.setVoucherId(voucher.getId());
-        seckillVoucher.setStock(voucher.getStock());
-        seckillVoucher.setBeginTime(voucher.getBeginTime());
-        seckillVoucher.setEndTime(voucher.getEndTime());
-        seckillVoucherService.save(seckillVoucher);
-
-        //将秒杀信息存入redis
-        stringRedisTemplate.opsForValue().set(RedisConstants.SECKILL_STOCK_KEY + voucher.getId() ,
-                voucher.getStock().toString()) ;
 
 
-    }
 }

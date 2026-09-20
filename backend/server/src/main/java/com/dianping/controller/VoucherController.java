@@ -3,9 +3,11 @@ package com.dianping.controller;
 
 import com.dianping.result.Result;
 import com.dianping.entity.Voucher;
+import com.dianping.service.SeckillVoucherService;
 import com.dianping.service.VoucherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
@@ -17,8 +19,10 @@ import java.util.List;
 @Tag(name = "优惠券接口")
 public class VoucherController {
 
-    @Resource
+    @Autowired
     private VoucherService voucherService;
+    @Autowired
+    private SeckillVoucherService seckillVoucherService;
 
     /**
      * 新增普通券
@@ -40,7 +44,7 @@ public class VoucherController {
     @PostMapping("seckill")
     @Operation(summary = "新增秒杀优惠券")
     public Result<Long> addSeckillVoucher(@RequestBody Voucher voucher) {
-        voucherService.addSeckillVoucher(voucher);
+        seckillVoucherService.addSeckillVoucher(voucher);
         return Result.success(voucher.getId());
     }
 

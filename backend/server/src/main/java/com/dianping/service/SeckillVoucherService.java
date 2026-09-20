@@ -2,15 +2,13 @@ package com.dianping.service;
 
 import com.dianping.entity.SeckillVoucher;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.dianping.entity.Voucher;
 
-/**
- * <p>
- * 秒杀优惠券表，与优惠券是一对一关系 服务类
- * </p>
- *
- * @author 虎哥
- * @since 2022-01-04
- */
+
 public interface SeckillVoucherService extends IService<SeckillVoucher> {
-
+    /**
+     * 新增秒杀优惠券
+     * @param voucher
+     */
+    public void addSeckillVoucher(Voucher voucher) ;
 }

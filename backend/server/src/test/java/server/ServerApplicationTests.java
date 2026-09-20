@@ -1,4 +1,4 @@
-package org.example.server;
+package server;
 
 import com.dianping.HmDianPingApplication;
 import org.junit.jupiter.api.Test;
