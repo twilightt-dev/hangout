@@ -56,10 +56,16 @@ public class RedisConstants {
     public static final String ORDER_LOCK_KEY = "order:lock:";
     //订单的key
     public static final String VOUCHER_ORDER_KEY = "voucher:order:";
-    public static final String BLOG_LIKED_KEY = "blog:liked:";
+
+    //博客相关
+    public static final String BLOG_LIKE_KEY = "blog:like:";
+    public static final String BLOG_LIKED_LOCK_KEY = "blog:like:locked:";
+
     public static final String FEED_KEY = "feed:";
     public static final String SHOP_GEO_KEY = "shop:geo:";
     public static final String USER_SIGN_KEY = "sign:";
+
+    //文件上传
     public static final String UPLOAD_OWNER_KEY = "upload:owner:";
     public static final Long UPLOAD_OWNER_TTL = 24L;
 }

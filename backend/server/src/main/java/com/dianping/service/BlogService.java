@@ -1,16 +1,18 @@
 package com.dianping.service;
 
+import com.dianping.VO.BlogVO;
 import com.dianping.entity.Blog;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.dianping.result.Result;
 
-/**
- * <p>
- *  服务类
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
+import java.util.List;
+
+
 public interface BlogService extends IService<Blog> {
 
+    Result<BlogVO> queryBlogById(Long blogId);
+
+    Result<Void> likeBlog(Long id);
+
+    Result<List<Blog>> pageQueryHotBlog(Integer current);
 }
