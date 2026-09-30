@@ -2,6 +2,7 @@ package com.dianping.controller;
 
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dianping.VO.BlogVO;
 import com.dianping.constant.SystemConstants;
 import com.dianping.dto.UserDTO;
 import com.dianping.utils.UserHolder;
@@ -13,30 +14,23 @@ import com.dianping.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import java.util.List;
 
-/**
- * <p>
- * 前端控制器
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
+
 @RestController
 @RequestMapping("/blog")
 @Tag(name = "博客接口")
 public class BlogController {
-
-    @Resource
+    @Autowired
     private BlogService blogService;
-    @Resource
+    @Autowired
     private UserService userService;
 
-    @PostMapping
+    @PostMapping("/post")
     @Operation(summary = "发布探店博客")
     public Result<Long> saveBlog(@RequestBody Blog blog) {
         // 获取登录用户
@@ -48,13 +42,18 @@ public class BlogController {
         return Result.success(blog.getId());
     }
 
+    @GetMapping("/view/{id}")
+    @Operation(summary = "查询博客详情")
+    public Result<BlogVO> viewBlog(@PathVariable("id") Long blogId){
+        return blogService.queryBlogById(blogId) ;
+
+    }
+
+
     @PutMapping("/like/{id}")
     @Operation(summary = "点赞博客")
     public Result<Void> likeBlog(@PathVariable("id") Long id) {
-        // 修改点赞数量
-        blogService.update()
-                .setSql("liked = liked + 1").eq("id", id).update();
-        return Result.success();
+        return blogService.likeBlog(id) ;
     }
 
     @GetMapping("/of/me")
@@ -72,20 +71,7 @@ public class BlogController {
 
     @GetMapping("/hot")
     @Operation(summary = "分页查询热门博客")
-    public Result<List<Blog>> queryHotBlog(@RequestParam(value = "current", defaultValue = "1") Integer current) {
-        // 根据用户查询
-        Page<Blog> page = blogService.query()
-                .orderByDesc("liked")
-                .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
-        // 获取当前页数据
-        List<Blog> records = page.getRecords();
-        // 查询用户
-        records.forEach(blog ->{
-            Long userId = blog.getUserId();
-            User user = userService.getById(userId);
-            blog.setName(user.getNickName());
-            blog.setIcon(user.getIcon());
-        });
-        return Result.success(records);
+    public Result<List<Blog>> pageQueryHotBlog(@RequestParam(value = "current", defaultValue = "1") Integer current) {
+        return blogService.pageQueryHotBlog( current);
     }
 }
