@@ -104,6 +104,25 @@ export interface Blog {
   updateTime?: DateValue
 }
 
+export interface Comment {
+  id?: Id
+  blogId?: Id
+  userId?: Id
+  userName?: string
+  userIcon?: string
+  content?: string
+  createTime?: DateValue
+  updateTime?: DateValue
+}
+
+export interface PageResult<T> {
+  records?: T[]
+  current?: number
+  size?: number
+  total?: number
+  pages?: number
+}
+
 export interface PaginationQuery {
   current?: number
 }
