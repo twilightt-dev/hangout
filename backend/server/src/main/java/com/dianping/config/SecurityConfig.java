@@ -4,6 +4,7 @@ import com.dianping.filter.JwtAuthenticationFilter;
 import com.dianping.security.JwtProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -57,7 +58,11 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/error")
+                                "/error",
+                                "/blog/hot",
+                                "/blog/view/**")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/blog/*/comments")
                         .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter,
