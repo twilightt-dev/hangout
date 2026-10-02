@@ -11,10 +11,10 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 @SpringBootApplication
 @EnableConfigurationProperties(UploadProperties.class)
 @EnableAspectJAutoProxy(exposeProxy = true)
-public class HmDianPingApplication {
+public class CommentApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(HmDianPingApplication.class, args);
+        SpringApplication.run(CommentApplication.class, args);
     }
 
 }

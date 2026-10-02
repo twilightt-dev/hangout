@@ -14,11 +14,14 @@ import com.dianping.result.Result;
 import com.dianping.entity.User;
 import com.dianping.mapper.UserMapper;
 import com.dianping.service.UserService;
+import com.dianping.service.UserInfoService;
+import com.dianping.entity.UserInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -57,12 +60,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private final StringRedisTemplate stringRedisTemplate;
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
+    private final UserInfoService userInfoService;
     //构造器注入
     public UserServiceImpl(StringRedisTemplate stringRedisTemplate,
-                           TokenService tokenService, PasswordEncoder passwordEncoder) {
+                           TokenService tokenService, PasswordEncoder passwordEncoder,
+                           UserInfoService userInfoService) {
         this.stringRedisTemplate = stringRedisTemplate;
         this.tokenService = tokenService ;
         this.passwordEncoder = passwordEncoder;
+        this.userInfoService = userInfoService;
     }
 
     @Override
@@ -161,6 +167,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional
     public Result<Void> register(RegisterDTO registerDTO) {
         String phone = registerDTO.getPhone();
 
@@ -217,6 +224,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         // 5.保存数据库
         save(user);
+        userInfoService.getOrCreate(user.getId());
 
         return Result.success();
     }

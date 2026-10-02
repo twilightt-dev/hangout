@@ -6,6 +6,7 @@ import com.dianping.dto.LoginDTO;
 import com.dianping.dto.RefreshTokenDTO;
 import com.dianping.dto.RegisterDTO;
 import com.dianping.dto.UserDTO;
+import com.dianping.dto.UpdateUserInfoDTO;
 import com.dianping.entity.UserInfo;
 import com.dianping.result.Result;
 import com.dianping.security.TokenService;
@@ -133,12 +134,20 @@ public class UserController {
         // 查询详情
         UserInfo info = userInfoService.getById(userId);
         if (info == null) {
-            // 没有详情，应该是第一次查看详情
-            return Result.success();
+            if (userService.getById(userId) == null) {
+                return Result.error("用户不存在");
+            }
+            info = userInfoService.getOrCreate(userId);
         }
         info.setCreateTime(null);
         info.setUpdateTime(null);
         // 返回
         return Result.success(info);
+    }
+
+    @PutMapping("/info")
+    @Operation(summary = "更新当前用户详情")
+    public Result<Void> updateInfo(@Valid @RequestBody UpdateUserInfoDTO request) {
+        return userInfoService.updateCurrent(request);
     }
 }

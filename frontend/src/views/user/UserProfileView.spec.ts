@@ -86,6 +86,7 @@ describe('UserProfileView', () => {
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-test="toggle-follow"]').trigger('click')
+    expect(setFollow).toHaveBeenCalledWith(1, true)
     route.params.id = '2'; route.fullPath = '/users/2'
     await nextTick(); await flushPromises()
     followRequest.resolve()
