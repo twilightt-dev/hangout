@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.dianping.VO.TokenVO;
+import com.dianping.VO.UserVO;
 import com.dianping.constant.RedisConstants;
 import com.dianping.constant.SystemConstants;
 import com.dianping.dto.RegisterDTO;
@@ -19,6 +20,7 @@ import com.dianping.entity.UserInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -131,6 +133,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 TimeUnit.MINUTES);
         log.debug("注册验证码已生成并写入 Redis");
         return Result.success() ;
+    }
+
+    @Override
+    public Result<UserVO> queryUserById(Long userId) {
+        if (userId == null || userId <= 0) {
+            return Result.error("用户ID非法");
+        }
+        User user = getById(userId);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+
+        UserInfo info = userInfoService.getOrCreate(userId);
+        if (info == null) {
+            return Result.error("用户详情获取失败");
+        }
+
+        UserVO vo = new UserVO();
+        BeanUtils.copyProperties(user, vo);
+        vo.setCity(info.getCity());
+        vo.setIntroduce(info.getIntroduce());
+        vo.setFans(info.getFans());
+        vo.setFollowee(info.getFollowee());
+        return Result.success(vo);
     }
 
     @Override

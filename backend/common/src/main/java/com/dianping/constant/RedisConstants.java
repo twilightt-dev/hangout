@@ -61,6 +61,9 @@ public class RedisConstants {
     public static final String BLOG_LIKE_KEY = "blog:like:";
     public static final String BLOG_LIKED_LOCK_KEY = "blog:like:locked:";
 
+    // 用户关注列表，集合成员为被关注用户 ID
+    public static final String FOLLOW_USER_KEY = "follow:user:";
+
     public static final String FEED_KEY = "feed:";
     public static final String SHOP_GEO_KEY = "shop:geo:";
     public static final String USER_SIGN_KEY = "sign:";

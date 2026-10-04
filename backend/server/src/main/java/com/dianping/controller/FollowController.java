@@ -1,6 +1,7 @@
 package com.dianping.controller;
 
 
+import com.dianping.VO.CommonFollowVO;
 import com.dianping.result.Result;
 import com.dianping.service.FollowService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 
 @RestController
@@ -33,6 +36,12 @@ public class FollowController {
     public Result<Void> follow(@PathVariable("id") Long followUserId,
                                @PathVariable("toFollow") Boolean toFollow) {
         return followService.follow(followUserId, toFollow);
+    }
+
+    @GetMapping("/common/{id}")
+    @Operation(summary = "查询共同关注")
+    public Result<List<CommonFollowVO>> common(@PathVariable("id") Long followUserId) {
+        return followService.queryCommonFollows(followUserId);
     }
 
 

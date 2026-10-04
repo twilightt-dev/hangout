@@ -1,5 +1,6 @@
 package server;
 
+import com.dianping.VO.CommonFollowVO;
 import com.dianping.controller.FollowController;
 import com.dianping.result.Result;
 import com.dianping.service.FollowService;
@@ -29,6 +30,13 @@ class FollowControllerTest {
             if ("isFollow".equals(invocation.getMethod().getName())) {
                 return Result.success(true);
             }
+            if ("queryCommonFollows".equals(invocation.getMethod().getName())) {
+                CommonFollowVO commonFollow = new CommonFollowVO();
+                commonFollow.setId(7L);
+                commonFollow.setNickName("共同关注用户");
+                commonFollow.setIcon("/avatar.png");
+                return Result.success(java.util.List.of(commonFollow));
+            }
             return null;
         });
         ReflectionTestUtils.setField(controller, "followService", followService);
@@ -47,5 +55,12 @@ class FollowControllerTest {
         mockMvc.perform(get("/follow/or/not/2"))
                 .andExpect(status().isOk())
                 .andExpect(content().json("{\"code\":1,\"data\":true}"));
+    }
+
+    @Test
+    void commonFollowsReturnsPublicUserSummary() throws Exception {
+        mockMvc.perform(get("/follow/common/2"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"code\":1,\"data\":[{\"id\":7,\"nickName\":\"共同关注用户\",\"icon\":\"/avatar.png\"}]}"));
     }
 }

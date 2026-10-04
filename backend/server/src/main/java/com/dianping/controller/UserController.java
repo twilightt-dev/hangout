@@ -2,6 +2,7 @@ package com.dianping.controller;
 
 
 import com.dianping.VO.TokenVO;
+import com.dianping.VO.UserVO;
 import com.dianping.dto.LoginDTO;
 import com.dianping.dto.RefreshTokenDTO;
 import com.dianping.dto.RegisterDTO;
@@ -126,6 +127,12 @@ public class UserController {
     public Result<UserDTO> me(){
 
         return Result.success(UserHolder.getUser());
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "根据 ID 查询用户主页信息")
+    public Result<UserVO> queryUserById(@PathVariable("id") Long userId) {
+        return userService.queryUserById(userId);
     }
 
     @GetMapping("/info/{id}")

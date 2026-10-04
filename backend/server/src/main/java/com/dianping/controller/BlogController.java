@@ -69,6 +69,14 @@ public class BlogController {
         return Result.success(records);
     }
 
+    @GetMapping("/of/user")
+    @Operation(summary = "根据id分页查询用户的博客")
+    public Result<Page<BlogVO>> queryUserBlogs(
+            @RequestParam("id") Long userId,
+            @RequestParam(value = "current", defaultValue = "1") Integer current) {
+        return blogService.queryBlogsByUser(userId, current);
+    }
+
     @GetMapping("/hot")
     @Operation(summary = "分页查询热门博客")
     public Result<List<Blog>> pageQueryHotBlog(@RequestParam(value = "current", defaultValue = "1") Integer current) {

@@ -1,6 +1,7 @@
 package com.dianping.service;
 
 import com.dianping.entity.Follow;
+import com.dianping.VO.CommonFollowVO;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.dianping.result.Result;
 
@@ -14,8 +15,10 @@ import com.dianping.result.Result;
  */
 public interface FollowService extends IService<Follow> {
 
-    Result<Void> follow(Long followUserId, Boolean isFollow);
+    Result<Void> follow(Long followUserId, Boolean toFollow);
 
     Result<Boolean> isFollow(Long followUserId);
+
+    Result<java.util.List<CommonFollowVO>> queryCommonFollows(Long followUserId);
 
 }
