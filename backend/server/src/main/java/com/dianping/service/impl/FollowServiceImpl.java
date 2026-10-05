@@ -6,6 +6,7 @@ import com.dianping.dto.UserDTO;
 import com.dianping.entity.Follow;
 import com.dianping.entity.User;
 import com.dianping.entity.UserInfo;
+import com.dianping.feed.FeedTaskRepository;
 import com.dianping.result.Result;
 import com.dianping.mapper.FollowMapper;
 import com.dianping.service.FollowService;
@@ -43,6 +44,8 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private FeedTaskRepository feedTasks;
 
     @Override
     @Transactional
@@ -95,6 +98,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
                 throw new IllegalStateException("关注计数更新失败");
             }
             syncFollowSet(userId, followUserId);
+            feedTasks.relationship(userId, followUserId, true);
             return Result.success();
         }
 
@@ -118,6 +122,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             throw new IllegalStateException("关注计数更新失败");
         }
         stringRedisTemplate.opsForSet().remove(followSetKey(userId), String.valueOf(followUserId));
+        feedTasks.relationship(userId, followUserId, false);
         return Result.success();
     }
 

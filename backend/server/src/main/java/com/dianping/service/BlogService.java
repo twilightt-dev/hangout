@@ -11,6 +11,8 @@ import java.util.List;
 
 public interface BlogService extends IService<Blog> {
 
+    Result<Long> publishBlog(Blog blog);
+
     Result<BlogVO> queryBlogById(Long blogId);
 
     Result<Void> likeBlog(Long id);

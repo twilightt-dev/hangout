@@ -6,6 +6,7 @@ import com.dianping.constant.SystemConstants;
 import com.dianping.dto.UserDTO;
 import com.dianping.entity.Blog;
 import com.dianping.entity.User;
+import com.dianping.feed.FeedTaskRepository;
 import com.dianping.mapper.BlogMapper;
 import com.dianping.result.Result;
 import com.dianping.service.BlogService;
@@ -20,6 +21,10 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +39,21 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements Bl
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private RedissonClient redissonClient;
+    @Autowired
+    private FeedTaskRepository feedTasks;
+
+    @Override
+    @Transactional
+    public Result<Long> publishBlog(Blog blog) {
+        UserDTO user = UserHolder.getUser();
+        if (user == null || user.getId() == null) return Result.error("请先登录");
+        // 发布 ID、作者、时间和计数均由服务端维护，不能由请求伪造。
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS);
+        blog.setId(null).setUserId(user.getId()).setCreateTime(now).setUpdateTime(now).setLiked(0).setComments(0);
+        if (!save(blog)) throw new IllegalStateException("博客发布失败");
+        feedTasks.publish(blog.getId(), user.getId());
+        return Result.success(blog.getId());
+    }
 
     @Override
     public Result<BlogVO> queryBlogById(Long blogId) {
