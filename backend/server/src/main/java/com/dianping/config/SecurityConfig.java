@@ -14,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RegexRequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -63,6 +64,11 @@ public class SecurityConfig {
                                 "/blog/view/**")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/blog/*/comments")
+                        .permitAll()
+                        .requestMatchers(RegexRequestMatcher.regexMatcher(
+                                HttpMethod.GET, "^/user/[0-9]+$"))
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/blog/of/user")
                         .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter,

@@ -5,7 +5,7 @@
       <p>{{ message || '加载失败，请检查网络后重试。' }}</p>
       <button type="button" class="state-retry" @click="$emit('retry')">重新加载</button>
     </template>
-    <p v-else>还没有内容，去城市里发现一点新鲜事吧。</p>
+    <p v-else>{{ message || '还没有内容，去城市里发现一点新鲜事吧。' }}</p>
   </section>
 </template>
 

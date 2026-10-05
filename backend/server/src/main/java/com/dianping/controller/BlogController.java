@@ -11,6 +11,8 @@ import com.dianping.entity.Blog;
 import com.dianping.entity.User;
 import com.dianping.service.BlogService;
 import com.dianping.service.UserService;
+import com.dianping.feed.FeedService;
+import com.dianping.dto.ScrollResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -29,17 +31,20 @@ public class BlogController {
     private BlogService blogService;
     @Autowired
     private UserService userService;
+    @Autowired
+    private FeedService feedService;
 
     @PostMapping("/post")
     @Operation(summary = "发布探店博客")
     public Result<Long> saveBlog(@RequestBody Blog blog) {
-        // 获取登录用户
-        UserDTO user = UserHolder.getUser();
-        blog.setUserId(user.getId());
-        // 保存探店博文
-        blogService.save(blog);
-        // 返回id
-        return Result.success(blog.getId());
+        return blogService.publishBlog(blog);
+    }
+
+    @GetMapping("/of/follow")
+    @Operation(summary = "按时间滚动查询关注动态")
+    public Result<ScrollResult> queryFollowFeed(@RequestParam("lastId") long lastId,
+            @RequestParam(value = "offset", defaultValue = "0") int offset) {
+        return feedService.read(lastId, offset);
     }
 
     @GetMapping("/view/{id}")
@@ -67,6 +72,14 @@ public class BlogController {
         // 获取当前页数据
         List<Blog> records = page.getRecords();
         return Result.success(records);
+    }
+
+    @GetMapping("/of/user")
+    @Operation(summary = "根据id分页查询用户的博客")
+    public Result<Page<BlogVO>> queryUserBlogs(
+            @RequestParam("id") Long userId,
+            @RequestParam(value = "current", defaultValue = "1") Integer current) {
+        return blogService.queryBlogsByUser(userId, current);
     }
 
     @GetMapping("/hot")

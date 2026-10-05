@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dianping.mapper.FollowMapper">
+    <resultMap id="FeedAuthor" type="com.dianping.feed.FeedRepository$Author">
+        <constructor>
+            <idArg column="follow_user_id" javaType="_long"/>
+            <arg column="hot" javaType="_boolean"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectFeedAuthors" resultMap="FeedAuthor">
+        SELECT f.follow_user_id,
+          ((SELECT COUNT(*) FROM tb_follow fans WHERE fans.follow_user_id=f.follow_user_id) &gt;= #{threshold}) AS hot
+        FROM tb_follow f
+        WHERE f.user_id=#{userId} ORDER BY f.follow_user_id
+    </select>
+
+    <select id="selectFeedFans" resultType="java.lang.Long">
+        SELECT user_id FROM tb_follow
+        WHERE follow_user_id=#{authorId} AND user_id &gt; #{afterUserId}
+        ORDER BY user_id LIMIT #{limit}
+    </select>
+</mapper>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dianping.mapper.BlogMapper">
+
+    <resultMap id="FeedBlog" type="com.dianping.entity.Blog">
+        <id column="id" property="id"/>
+        <result column="shop_id" property="shopId"/>
+        <result column="user_id" property="userId"/>
+        <result column="title" property="title"/>
+        <result column="images" property="images"/>
+        <result column="content" property="content"/>
+        <result column="liked" property="liked"/>
+        <result column="comments" property="comments"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!--可复用的SQL片段-->
+    <sql id="FeedAuthors">
+        <choose>
+            <when test="authors != null and !authors.isEmpty()">
+                user_id IN
+                <foreach collection="authors" item="authorId" open="(" separator="," close=")">
+                    #{authorId}
+                </foreach>
+            </when>
+            <otherwise>1=0</otherwise>
+        </choose>
+    </sql>
+
+    <select id="selectFeedRecent" resultMap="FeedBlog">
+        SELECT * FROM tb_blog
+        WHERE <include refid="FeedAuthors"/>
+          AND create_time &gt;= #{lower} AND create_time &lt;= #{upper}
+        ORDER BY create_time DESC, CAST(CAST(id AS CHAR(20)) AS BINARY) DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectFeedHistory" resultMap="FeedBlog">
+        SELECT * FROM tb_blog
+        WHERE <include refid="FeedAuthors"/>
+          AND create_time &gt;= #{lower} AND id &gt; #{afterBlogId}
+        ORDER BY id LIMIT #{limit}
+    </select>
+</mapper>
