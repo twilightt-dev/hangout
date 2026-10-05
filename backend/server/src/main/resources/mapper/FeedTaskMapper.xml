@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dianping.mapper.FeedTaskMapper">
+    <resultMap id="FeedTask" type="com.dianping.entity.FeedTask">
+        <id column="id" property="id"/>
+        <result column="kind" property="kind"/>
+        <result column="blog_id" property="blogId"/>
+        <result column="author_id" property="authorId"/>
+        <result column="user_id" property="userId"/>
+        <result column="status" property="status"/>
+        <result column="cursor_id" property="cursorId"/>
+        <result column="attempts" property="attempts"/>
+        <result column="next_attempt" property="nextAttempt"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="last_error" property="lastError"/>
+        <result column="finished_at" property="finishedAt"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <select id="selectDue" resultMap="FeedTask">
+        SELECT id,kind,blog_id,author_id,user_id,status,cursor_id,attempts,next_attempt,
+               lease_owner,lease_until,last_error,finished_at,created_at
+        FROM tb_feed_task
+        WHERE (status='PENDING' AND next_attempt &lt;= #{now})
+           OR (status='RUNNING' AND lease_until &lt;= #{now})
+        ORDER BY id LIMIT #{limit}
+    </select>
+
+    <update id="claim">
+        UPDATE tb_feed_task SET status='RUNNING',lease_owner=#{owner},lease_until=#{leaseUntil}
+        WHERE id=#{task.id} AND cursor_id=#{task.cursorId} AND attempts=#{task.attempts}
+          AND ((status='PENDING' AND next_attempt &lt;= #{now}) OR (status='RUNNING' AND lease_until &lt;= #{now}))
+    </update>
+
+    <update id="progress">
+        UPDATE tb_feed_task SET status='PENDING',cursor_id=#{cursor},next_attempt=#{now},lease_owner=NULL,lease_until=NULL
+        WHERE id=#{taskId} AND lease_owner=#{owner} AND status='RUNNING'
+    </update>
+
+    <update id="finish">
+        UPDATE tb_feed_task SET status=#{status},last_error=#{reason,jdbcType=VARCHAR},
+          lease_owner=NULL,lease_until=NULL,finished_at=#{now}
+        WHERE id=#{taskId} AND lease_owner=#{owner} AND status='RUNNING'
+    </update>
+
+    <update id="retry">
+        UPDATE tb_feed_task SET status='PENDING',attempts=attempts+1,last_error=#{error},next_attempt=#{nextAttempt},
+          lease_owner=NULL,lease_until=NULL
+        WHERE id=#{taskId} AND lease_owner=#{owner} AND status='RUNNING'
+    </update>
+</mapper>

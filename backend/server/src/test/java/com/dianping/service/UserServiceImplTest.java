@@ -42,7 +42,8 @@ class UserServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(values);
         when(values.get(RedisConstants.LOGIN_CODE_KEY + "19112345678")).thenReturn("123456");
         User user = new User().setId(42L).setPhone("19112345678");
-        service = spy(new UserServiceImpl(redisTemplate, tokenService, passwordEncoder));
+        UserInfoService userInfoService = mock(UserInfoService.class);
+        service = spy(new UserServiceImpl(redisTemplate, tokenService, passwordEncoder, userInfoService));
         doReturn(user).when(service).getOne(any(Wrapper.class));
     }
 

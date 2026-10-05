@@ -29,6 +29,24 @@ export interface User {
   updateTime?: DateValue
 }
 
+/** 用户主页公开信息，后端对应 UserVO。 */
+export interface UserVO {
+  id?: Id
+  nickName?: string
+  icon?: string
+  createTime?: DateValue
+  city?: string
+  introduce?: string
+  fans?: number
+  followee?: number
+}
+
+export interface CommonFollowVO {
+  id?: Id
+  nickName?: string
+  icon?: string
+}
+
 export interface UserInfo {
   userId?: Id
   city?: string

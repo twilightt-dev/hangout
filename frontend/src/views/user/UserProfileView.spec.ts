@@ -22,7 +22,7 @@ describe('UserProfileView', () => {
   afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()) })
   beforeEach(() => {
     route.params.id = '1'; route.fullPath = '/users/1'; authState.authenticated = false; authState.user = null
-    getUser.mockReset().mockResolvedValue({ id: 1, nickName: '旧用户' }); getUserInfo.mockReset().mockResolvedValue({ city: '杭州' }); getBlogsByUser.mockReset().mockResolvedValue([]); getFollowStatus.mockReset().mockResolvedValue(false); getCommonFollows.mockReset().mockResolvedValue([]); setFollow.mockReset(); fetchCurrentUser.mockReset(); push.mockReset(); replace.mockReset()
+    getUser.mockReset().mockResolvedValue({ id: 1, nickName: '旧用户', city: '杭州' }); getUserInfo.mockReset().mockResolvedValue({ city: '杭州' }); getBlogsByUser.mockReset().mockResolvedValue({ records: [], current: 1, pages: 1 }); getFollowStatus.mockReset().mockResolvedValue(false); getCommonFollows.mockReset().mockResolvedValue([]); setFollow.mockReset(); fetchCurrentUser.mockReset(); push.mockReset(); replace.mockReset()
   })
 
   it('快速切换用户路由后忽略旧详情响应，并在无效 ID 时清空旧内容', async () => {
@@ -46,6 +46,7 @@ describe('UserProfileView', () => {
   it('切换路由后不让旧共同关注响应写入当前用户页面', async () => {
     const common = deferred<Array<{ id: number; nickName: string }>>()
     getCommonFollows.mockReturnValue(common.promise)
+    authState.authenticated = true; authState.user = { id: 99 }
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
@@ -55,6 +56,15 @@ describe('UserProfileView', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('旧共同关注')
+  })
+
+  it('未登录点击共同关注时跳转登录页且不发起共同关注请求', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
+
+    expect(push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/users/1' } })
+    expect(getCommonFollows).not.toHaveBeenCalled()
   })
 
   it('认证但身份缺失时先恢复当前用户，发现目标是自己则跳转我的主页', async () => {
@@ -86,6 +96,7 @@ describe('UserProfileView', () => {
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-test="toggle-follow"]').trigger('click')
+    expect(setFollow).toHaveBeenCalledWith(1, true)
     route.params.id = '2'; route.fullPath = '/users/2'
     await nextTick(); await flushPromises()
     followRequest.resolve()

@@ -1,13 +1,13 @@
 package server;
 
-import com.dianping.HmDianPingApplication;
+import com.dianping.CommentApplication;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Instant;
 
 @SpringBootTest(
-        classes = HmDianPingApplication.class,
+        classes = CommentApplication.class,
         properties = "security.jwt.secret=dGhpcy1pcy1hLXRlc3Qtc2VjcmV0LXdpdGgtMzItYnl0ZXM=")
 class ServerApplicationTests {
 

@@ -2,6 +2,7 @@ package com.dianping.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.dianping.VO.TokenVO;
+import com.dianping.VO.UserVO;
 import com.dianping.dto.LoginDTO;
 import com.dianping.dto.RegisterDTO;
 import com.dianping.result.Result;
@@ -25,4 +26,6 @@ public interface UserService extends IService<User> {
     Result<Void> register(@Valid RegisterDTO registerDTO);
 
     Result<Void> sendCodeWhenRegister(String phone);
+
+    Result<UserVO> queryUserById(Long userId);
 }
