@@ -61,6 +61,24 @@ export interface UserInfo {
   updateTime?: DateValue
 }
 
+export type AvatarSourceType = 'UPLOAD' | 'DEFAULT'
+
+export interface AvatarOption {
+  id: string
+  icon: string
+}
+
+export interface AvatarSelection {
+  sourceType: AvatarSourceType
+  uploadPath?: string
+  defaultId?: string
+}
+
+export interface AvatarVO {
+  icon: string
+  sourceType: AvatarSourceType
+}
+
 export interface ShopType {
   id?: Id
   name?: string

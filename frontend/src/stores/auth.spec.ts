@@ -42,6 +42,16 @@ describe('auth store', () => {
     expect(store.user).toBeNull()
   })
 
+  it('头像保存成功后同步更新当前用户和会话缓存', () => {
+    const store = useAuthStore()
+    store.setSession({ accessToken: 'jwt', refreshToken: 'refresh-jwt', tokenType: 'Bearer', accessTtl: 900 }, { id: 1, nickName: '星', icon: '/imgs/old.png' })
+
+    store.updateAvatar('/imgs/new.png')
+
+    expect(store.user?.icon).toBe('/imgs/new.png')
+    expect(JSON.parse(sessionStorage.getItem('userInfo') || '{}').icon).toBe('/imgs/new.png')
+  })
+
   it('always clears local session when logout fails', async () => {
     const store = useAuthStore()
     store.setSession({ accessToken: 'jwt', refreshToken: 'refresh-jwt', tokenType: 'Bearer', accessTtl: 900 }, { id: 1 })
