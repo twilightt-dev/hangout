@@ -11,3 +11,9 @@ export const uploadBlogImage = (file: File) => {
 export const deleteBlogImage = (path: string) => dataOf<string>(http.delete<string>('/upload/blog/deleteImage', {
   params: { name: path.replace(/^\/imgs(?=\/)/, '') },
 }))
+
+export const uploadAvatar = (file: File) => {
+  const form = new FormData()
+  form.append('image', file)
+  return dataOf<string>(http.post<string>('/upload/avatar', form))
+}

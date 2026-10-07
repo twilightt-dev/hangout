@@ -23,6 +23,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (newUser !== undefined) { user.value = newUser; sessionStorage.setItem('userInfo', JSON.stringify(newUser)) }
   }
   async function fetchCurrentUser() { user.value = await userApi.getCurrentUser(); sessionStorage.setItem('userInfo', JSON.stringify(user.value)); return user.value }
+  function updateAvatar(icon: string) {
+    if (!user.value) return
+    user.value = { ...user.value, icon }
+    sessionStorage.setItem('userInfo', JSON.stringify(user.value))
+  }
   async function signIn(form: userApi.LoginForm) {
     const tokens = await userApi.login(form)
     setSession(tokens)
@@ -50,5 +55,5 @@ export const useAuthStore = defineStore('auth', () => {
     for (const key of ['token', 'refreshToken', 'tokenType', 'accessTtl', 'userInfo']) sessionStorage.removeItem(key)
   }
   restore()
-  return { token, user, isAuthenticated, restore, setSession, fetchCurrentUser, signIn, signOut, clearSession }
+  return { token, user, isAuthenticated, restore, setSession, fetchCurrentUser, updateAvatar, signIn, signOut, clearSession }
 })
