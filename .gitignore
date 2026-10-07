@@ -5,6 +5,8 @@ backend/**/*.iml
 backend/.classpath
 backend/.project
 backend/.settings/
+docs
+lessions
 
 # Vue / Node
 frontend/node_modules/
@@ -25,6 +27,11 @@ nginx-1.18.0/html/hmdp-legacy/
 
 # Persistent user uploads
 uploads/
+!uploads/
+uploads/*
+!uploads/icons/
+uploads/icons/*
+!uploads/icons/default-0[1-8].png
 
 # IDE / operating system
 .idea/

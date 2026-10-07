@@ -75,4 +75,8 @@ public class RedisConstants {
     //文件上传
     public static final String UPLOAD_OWNER_KEY = "upload:owner:";
     public static final Long UPLOAD_OWNER_TTL = 24L;
+
+    //头像临时文件所有权
+    public static final String AVATAR_UPLOAD_OWNER_KEY = "avatar:upload:owner:";
+    public static final Long AVATAR_UPLOAD_OWNER_TTL_MINUTES = 10L;
 }
