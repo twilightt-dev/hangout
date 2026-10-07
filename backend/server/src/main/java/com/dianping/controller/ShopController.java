@@ -7,7 +7,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dianping.constant.SystemConstants;
 import com.dianping.result.Result;
 import com.dianping.entity.Shop;
+import com.dianping.exception.InvalidShopGeoQueryException;
 import com.dianping.service.ShopService;
+import com.dianping.service.ShopGeoValidator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
@@ -79,14 +81,15 @@ public class ShopController {
     @Operation(summary = "按类型分页查询门店")
     public Result<List<Shop>> queryShopByType(
             @RequestParam("typeId") Integer typeId,
-            @RequestParam(value = "current", defaultValue = "1") Integer current
+            @RequestParam(value = "current", defaultValue = "1") Integer current,
+            @RequestParam(value = "sort", defaultValue = "comments") String sort,
+            @RequestParam(value = "longitude", required = false) Double longitude,
+            @RequestParam(value = "latitude", required = false) Double latitude
     ) {
-        // 根据类型分页查询
-        Page<Shop> page = shopService.query()
-                .eq("type_id", typeId)
-                .page(new Page<>(current, SystemConstants.DEFAULT_PAGE_SIZE));
-        // 返回数据
-        return Result.success(page.getRecords());
+        if ("distance".equals(sort) && !ShopGeoValidator.isValidCoordinate(longitude, latitude)) {
+            throw new InvalidShopGeoQueryException();
+        }
+        return shopService.queryByType(typeId, current, sort, longitude, latitude);
     }
 
     /**

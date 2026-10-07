@@ -63,6 +63,33 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void mapsInvalidShopGeoQueryToBadRequestResult() throws Exception {
+        MockMvc mvc = MockMvcBuilders
+                .standaloneSetup(new ThrowingController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mvc.perform(get("/test/invalid-geo").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.msg").value("距离排序需要有效的经纬度"));
+    }
+
+    @Test
+    void mapsInvalidQueryParameterTypeToBadRequestResult() throws Exception {
+        MockMvc mvc = MockMvcBuilders
+                .standaloneSetup(new ThrowingController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mvc.perform(get("/test/typed-parameter")
+                        .param("longitude", "not-a-number")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.msg").value("请求参数格式错误：longitude"));
+    }
+
+    @Test
     void mapsBeanValidationFailureToBadRequestResult() throws Exception {
         MockMvc mvc = MockMvcBuilders
                 .standaloneSetup(new ThrowingController())
@@ -119,6 +146,15 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/test/required-parameter")
         void requiredParameter(@RequestParam String phone) {
+        }
+
+        @GetMapping("/test/invalid-geo")
+        void invalidGeo() {
+            throw new InvalidShopGeoQueryException();
+        }
+
+        @GetMapping("/test/typed-parameter")
+        void typedParameter(@RequestParam Double longitude) {
         }
 
         @PostMapping("/test/request-body")

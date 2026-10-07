@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,19 @@ public class GlobalExceptionHandler {
     public Result<Void> handleMissingRequestParameterException(
             MissingServletRequestParameterException exception) {
         return Result.error("缺少请求参数：" + exception.getParameterName());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleMethodArgumentTypeMismatchException(
+            MethodArgumentTypeMismatchException exception) {
+        return Result.error("请求参数格式错误：" + exception.getName());
+    }
+
+    @ExceptionHandler(InvalidShopGeoQueryException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleInvalidShopGeoQueryException(InvalidShopGeoQueryException exception) {
+        return Result.error(exception.getMessage());
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

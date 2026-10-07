@@ -8,17 +8,33 @@ import com.dianping.entity.Shop;
 import com.dianping.mapper.ShopMapper;
 import com.dianping.result.Result;
 import com.dianping.service.ShopService;
+import com.dianping.service.ShopGeoValidator;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.geo.Distance;
+import org.springframework.data.geo.GeoResult;
+import org.springframework.data.geo.GeoResults;
+import org.springframework.data.geo.Metrics;
+import org.springframework.data.geo.Point;
+import org.springframework.data.redis.connection.RedisGeoCommands;
+import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.domain.geo.GeoReference;
+import org.springframework.data.redis.domain.geo.GeoShape;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -142,16 +158,136 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
      * @param shop
      * @return
      */
+    @Transactional
     public Result<Void> update(Shop shop){
         Long id = shop.getId();
         if(id == null){
             return Result.error("店铺id不能为空");
         }
 
+        Shop before = getById(id);
         //为了保持数据库与缓存一致性，先操作数据库再删除缓存
-        updateById(shop) ;
+        if (!updateById(shop)) {
+            return Result.error("店铺不存在");
+        }
         stringRedisTemplate.delete(RedisConstants.SHOP_CACHE_KEY + id);
+        syncGeo(before, getById(id));
         return Result.success() ;
+    }
+
+    @Override
+    @Transactional
+    public boolean save(Shop shop) {
+        boolean saved = super.save(shop);
+        if (saved) {
+            syncGeo(null, shop);
+        }
+        return saved;
+    }
+
+    @Override
+    @Transactional
+    public boolean removeById(Serializable id) {
+        Shop existing = getById(id);
+        boolean removed = super.removeById(id);
+        if (removed) {
+            syncGeo(existing, null);
+        }
+        return removed;
+    }
+
+    @Override
+    public Result<List<Shop>> queryByType(Integer typeId, Integer current, String sort,
+                                           Double longitude, Double latitude) {
+        if (typeId == null || typeId <= 0) {
+            return Result.error("商铺类型非法");
+        }
+        if (current == null || current <= 0) {
+            return Result.error("页码非法");
+        }
+
+        if ("distance".equals(sort)) {
+            return queryByDistance(typeId, current, longitude, latitude);
+        }
+        if (!"comments".equals(sort) && !"score".equals(sort)) {
+            return Result.error("排序方式非法");
+        }
+
+        Page<Shop> page = query()
+                .eq("type_id", typeId)
+                .orderByDesc(sort)
+                .page(new Page<>(current, com.dianping.constant.SystemConstants.DEFAULT_PAGE_SIZE));
+        return Result.success(page.getRecords());
+    }
+
+    private Result<List<Shop>> queryByDistance(Integer typeId, Integer current,
+                                                Double longitude, Double latitude) {
+        if (!ShopGeoValidator.isValidCoordinate(longitude, latitude)) {
+            return Result.error("距离排序需要有效的经纬度");
+        }
+        if (current > 1) {
+            return Result.success(List.of());
+        }
+
+        GeoOperations<String, String> geo = stringRedisTemplate.opsForGeo();
+        GeoReference<String> reference = GeoReference.fromCoordinate(longitude, latitude);
+        GeoShape shape = GeoShape.byRadius(
+                new Distance(RedisConstants.SHOP_GEO_RADIUS_KM, Metrics.KILOMETERS));
+        RedisGeoCommands.GeoSearchCommandArgs args =
+                RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs()
+                        .includeDistance()
+                        .sortAscending()
+                        .limit(RedisConstants.SHOP_GEO_MAX_RESULTS);
+        GeoResults<RedisGeoCommands.GeoLocation<String>> results = geo.search(
+                RedisConstants.SHOP_GEO_KEY + typeId, reference, shape, args);
+        if (results == null || results.getContent().isEmpty()) {
+            return Result.success(List.of());
+        }
+
+        List<Long> ids = results.getContent().stream()
+                .map(GeoResult::getContent)
+                .map(RedisGeoCommands.GeoLocation::getName)
+                .map(Long::valueOf)
+                .toList();
+        Map<Long, Shop> shopsById = new HashMap<>();
+        listByIds(ids).forEach(shop -> shopsById.put(shop.getId(), shop));
+
+        List<Shop> shops = results.getContent().stream()
+                .map(result -> {
+                    Long id = Long.valueOf(result.getContent().getName());
+                    Shop shop = shopsById.get(id);
+                    if (shop != null && result.getDistance() != null) {
+                        shop.setDistance(roundKilometres(result.getDistance().getValue()));
+                    }
+                    return shop;
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        return Result.success(shops);
+    }
+
+    private static double roundKilometres(double value) {
+        return Math.round(value * 100D) / 100D;
+    }
+
+    private void syncGeo(Shop before, Shop after) {
+        GeoOperations<String, String> geo = stringRedisTemplate.opsForGeo();
+        removeFromGeo(geo, before);
+        addToGeo(geo, after);
+    }
+
+    private void removeFromGeo(GeoOperations<String, String> geo, Shop shop) {
+        if (shop != null && shop.getId() != null && shop.getTypeId() != null) {
+            geo.remove(RedisConstants.SHOP_GEO_KEY + shop.getTypeId(), shop.getId().toString());
+        }
+    }
+
+    private void addToGeo(GeoOperations<String, String> geo, Shop shop) {
+        if (shop != null && shop.getId() != null && shop.getTypeId() != null
+                && ShopGeoValidator.isValidCoordinate(shop.getX(), shop.getY())) {
+            geo.add(RedisConstants.SHOP_GEO_KEY + shop.getTypeId(),
+                    new Point(shop.getX(), shop.getY()), shop.getId().toString());
+        }
     }
 
     
