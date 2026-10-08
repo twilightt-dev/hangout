@@ -68,8 +68,11 @@ public class RedisConstants {
     public static final String FEED_KEY = "feed:";
     public static final String FEED_STATE_KEY = "feed:state:";
 
-
+    //附近店铺GEO
     public static final String SHOP_GEO_KEY = "shop:geo:";
+    public static final String SHOP_GEO_INIT_KEY = "shop:geo:initialized";
+    public static final double SHOP_GEO_RADIUS_KM = 5D;
+    public static final int SHOP_GEO_MAX_RESULTS = 50;
     public static final String USER_SIGN_KEY = "sign:";
 
     //文件上传

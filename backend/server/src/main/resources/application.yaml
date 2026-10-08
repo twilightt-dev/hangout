@@ -24,7 +24,9 @@ spring:
           max-idle: 10
           min-idle: 1
           time-between-eviction-runs: 10s
-
+shop:
+  geo:
+    init: true
 
 app:
   upload:
