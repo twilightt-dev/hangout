@@ -14,19 +14,19 @@ describe('ShopCard', () => {
       area: '西湖区',
       address: '文三路 88 号',
       avgPrice: 3500,
-      distance: 850,
+      distance: 0.85,
     }
 
     const wrapper = mount(ShopCard, { props: { shop } })
 
     expect(wrapper.get('[data-test="shop-image"]').attributes('src')).toBe('https://cdn.example.com/first.jpg')
-    expect(wrapper.get('[data-test="shop-distance"]').text()).toBe('850.0m')
+    expect(wrapper.get('[data-test="shop-distance"]').text()).toBe('0.85km')
     expect(wrapper.get('.shop-card__score').text()).toContain('★ 4.8')
   })
 
   it('距离为 0 时仍显示格式化后的距离', () => {
     const wrapper = mount(ShopCard, { props: { shop: { id: 13, name: '零距离门店', distance: 0 } } })
 
-    expect(wrapper.get('[data-test="shop-distance"]').text()).toBe('0.0m')
+    expect(wrapper.get('[data-test="shop-distance"]').text()).toBe('0.00km')
   })
 })

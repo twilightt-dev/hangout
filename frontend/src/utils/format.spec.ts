@@ -19,10 +19,9 @@ describe('formatDistance', () => {
   it.each([
     [null, ''],
     [undefined, ''],
-    [0, '0.0m'],
-    [999, '999.0m'],
-    [1000, '1.0km'],
-    [1234, '1.2km'],
+    [0, '0.00km'],
+    [0.456, '0.46km'],
+    [1.234, '1.23km'],
   ] as const)('formats %s as %s', (value, expected) => {
     expect(formatDistance(value)).toBe(expected)
   })

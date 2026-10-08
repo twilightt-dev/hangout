@@ -12,5 +12,5 @@ export function formatDistance(value: number | null | undefined): string {
     return ''
   }
 
-  return value < 1000 ? `${value.toFixed(1)}m` : `${(value / 1000).toFixed(1)}km`
+  return `${value.toFixed(2)}km`
 }

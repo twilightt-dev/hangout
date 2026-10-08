@@ -165,9 +165,9 @@ export interface PaginationQuery {
 
 export interface ShopTypeQuery extends PaginationQuery {
   typeId: Id
-  sortBy?: string
-  x?: number
-  y?: number
+  sort?: 'distance' | 'comments' | 'score'
+  longitude?: number
+  latitude?: number
 }
 
 export interface ShopNameQuery extends PaginationQuery {
