@@ -4,6 +4,7 @@ import com.dianping.cache.CacheClient;
 import com.dianping.cache.CacheResult;
 import com.dianping.cache.CacheState;
 import com.dianping.constant.RedisConstants;
+import com.dianping.constant.SystemConstants;
 import com.dianping.entity.Shop;
 import com.dianping.mapper.ShopMapper;
 import com.dianping.result.Result;
@@ -196,6 +197,15 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         return removed;
     }
 
+    /**
+     * 根据种类查询店铺
+     * @param typeId 店铺种类id
+     * @param current 当前页码
+     * @param sort 排序方式
+     * @param longitude 经度
+     * @param latitude 纬度
+     * @return 店铺列表
+     */
     @Override
     public Result<List<Shop>> queryByType(Integer typeId, Integer current, String sort,
                                            Double longitude, Double latitude) {
@@ -216,34 +226,51 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         Page<Shop> page = query()
                 .eq("type_id", typeId)
                 .orderByDesc(sort)
-                .page(new Page<>(current, com.dianping.constant.SystemConstants.DEFAULT_PAGE_SIZE));
+                .page(new Page<>(current, SystemConstants.DEFAULT_PAGE_SIZE));
         return Result.success(page.getRecords());
     }
 
+    /**
+     * 根据距离查询店铺
+     * @param typeId 店铺种类id
+     * @param current 页码
+     * @param longitude 经度
+     * @param latitude 纬度
+     * @return 店铺列表
+     */
     private Result<List<Shop>> queryByDistance(Integer typeId, Integer current,
                                                 Double longitude, Double latitude) {
         if (!ShopGeoValidator.isValidCoordinate(longitude, latitude)) {
             return Result.error("距离排序需要有效的经纬度");
         }
+        //目前距离查询只返回一页，最多50家，页码＞1返回空
         if (current > 1) {
             return Result.success(List.of());
         }
-
+        //GEO操作对象，第一个表示key，第二个表示member
         GeoOperations<String, String> geo = stringRedisTemplate.opsForGeo();
+        //表示从哪个位置开始计算距离
         GeoReference<String> reference = GeoReference.fromCoordinate(longitude, latitude);
+        //定义范围
         GeoShape shape = GeoShape.byRadius(
                 new Distance(RedisConstants.SHOP_GEO_RADIUS_KM, Metrics.KILOMETERS));
+        //设置GEOSEARCH命令的距离、排序、数量
         RedisGeoCommands.GeoSearchCommandArgs args =
                 RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs()
                         .includeDistance()
                         .sortAscending()
                         .limit(RedisConstants.SHOP_GEO_MAX_RESULTS);
+        //GeoResults：整批查询结果
+        //  └─ GeoResult：某一个成员的查询结果
+        //       ├─ content：GeoLocation，包含成员名称
+        //       │    └─ name："101"，也就是店铺 ID
+        //       └─ distance：0.456 km
         GeoResults<RedisGeoCommands.GeoLocation<String>> results = geo.search(
                 RedisConstants.SHOP_GEO_KEY + typeId, reference, shape, args);
         if (results == null || results.getContent().isEmpty()) {
             return Result.success(List.of());
         }
-
+        //获取店铺id，批量查询店铺详情，存成一个方便查询的哈希表
         List<Long> ids = results.getContent().stream()
                 .map(GeoResult::getContent)
                 .map(RedisGeoCommands.GeoLocation::getName)
@@ -252,6 +279,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         Map<Long, Shop> shopsById = new HashMap<>();
         listByIds(ids).forEach(shop -> shopsById.put(shop.getId(), shop));
 
+        //遍历redis，因为前面的查询没有维护距离顺序
         List<Shop> shops = results.getContent().stream()
                 .map(result -> {
                     Long id = Long.valueOf(result.getContent().getName());
@@ -270,6 +298,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         return Math.round(value * 100D) / 100D;
     }
 
+    /**
+     * 同步修改GEO（比如修改店铺数据时）
+     * @param before 改之前
+     * @param after 改之后
+     */
     private void syncGeo(Shop before, Shop after) {
         GeoOperations<String, String> geo = stringRedisTemplate.opsForGeo();
         removeFromGeo(geo, before);

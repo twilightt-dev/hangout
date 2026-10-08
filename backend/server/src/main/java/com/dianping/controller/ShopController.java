@@ -17,14 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 import java.util.List;
 
-/**
- * <p>
- * 前端控制器
- * </p>
- *
- * @author 虎哥
- * @since 2021-12-22
- */
+
 @RestController
 @RequestMapping("/shop")
 @Tag(name = "商铺接口")
@@ -72,10 +65,13 @@ public class ShopController {
     }
 
     /**
-     * 根据商铺类型分页查询商铺信息
-     * @param typeId 商铺类型
-     * @param current 页码
-     * @return 商铺列表
+     * 按类型分页查询门店
+     * @param typeId 店铺类型id
+     * @param current 当前页码
+     * @param sort 排序方式  距离、人气、评分
+     * @param longitude 经度
+     * @param latitude 纬度
+     * @return 符合的店铺列表
      */
     @GetMapping("/of/type")
     @Operation(summary = "按类型分页查询门店")
@@ -85,10 +81,10 @@ public class ShopController {
             @RequestParam(value = "sort", defaultValue = "comments") String sort,
             @RequestParam(value = "longitude", required = false) Double longitude,
             @RequestParam(value = "latitude", required = false) Double latitude
-    ) {
+    ) {//先检查经纬度是否合法
         if ("distance".equals(sort) && !ShopGeoValidator.isValidCoordinate(longitude, latitude)) {
             throw new InvalidShopGeoQueryException();
-        }
+        }//调用服务层
         return shopService.queryByType(typeId, current, sort, longitude, latitude);
     }
 

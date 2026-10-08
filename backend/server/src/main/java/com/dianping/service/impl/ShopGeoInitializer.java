@@ -12,10 +12,7 @@ import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * One-off, opt-in backfill for existing shop locations.
- * Enable with {@code shop.geo.init=true}; the marker makes subsequent runs idempotent.
- */
+
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "shop.geo.init", havingValue = "true")
@@ -31,7 +28,8 @@ public class ShopGeoInitializer implements org.springframework.boot.CommandLineR
 
     @Override
     public void run(String... args) {
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(RedisConstants.SHOP_GEO_INIT_KEY))) {
+        //如果标记存在时直接结束，避免每次都回填
+        if (redisTemplate.hasKey(RedisConstants.SHOP_GEO_INIT_KEY)) {
             return;
         }
 

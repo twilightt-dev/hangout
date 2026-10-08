@@ -76,13 +76,15 @@ describe('ShopListView', () => {
   })
 
   it('定位成功后按距离查询并把距离交给店铺卡片', async () => {
+    getCurrentLocation.mockResolvedValue({ longitude: 120.164, latitude: 30.274, simulatedAddress: '杭州武林广场一带' })
     getShopsByType.mockResolvedValue([{ id: 1, name: '西湖边餐厅', distance: 1.23 }])
     const wrapper = mount(ShopListView)
     await flushPromises()
 
-    expect(getShopsByType).toHaveBeenCalledWith(expect.objectContaining({
-      typeId: 1, current: 1, sort: 'distance', longitude: 120.155, latitude: 30.274,
-    }))
+    expect(getShopsByType).toHaveBeenCalledWith({
+      typeId: 1, current: 1, sort: 'distance', longitude: 120.164, latitude: 30.274,
+    })
+    expect(wrapper.text()).toContain('模拟定位：杭州武林广场一带，距离以此位置为参照。')
     expect(wrapper.get('[data-test="shop-distance"]').text()).toBe('1.23km')
   })
 
