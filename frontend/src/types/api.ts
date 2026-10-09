@@ -61,6 +61,21 @@ export interface UserInfo {
   updateTime?: DateValue
 }
 
+export interface SignResult {
+  date: DateValue
+  alreadySigned: boolean
+}
+
+export interface SignStats {
+  date: DateValue
+  month: string
+  todaySigned: boolean
+  monthlyDays: number
+  continuousDays: number
+  previousMonthDays: number
+  monthDifference: number
+}
+
 export type AvatarSourceType = 'UPLOAD' | 'DEFAULT'
 
 export interface AvatarOption {
