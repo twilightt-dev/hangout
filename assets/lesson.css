@@ -1,0 +1,20 @@
+:root { color-scheme: light; --ink:#17202a; --muted:#5c6b73; --paper:#fbfaf7; --card:#fff; --accent:#b24c36; --line:#e6ded4; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif; }
+main { max-width:880px; margin:0 auto; padding:48px 24px 72px; }
+.eyebrow { color:var(--accent); font-weight:700; letter-spacing:.08em; text-transform:uppercase; font-size:.78rem; }
+h1 { max-width:720px; margin:.25rem 0 1rem; font:700 clamp(2rem,5vw,3.6rem)/1.08 Georgia,serif; }
+h2 { margin-top:2.5rem; font:700 1.6rem/1.2 Georgia,serif; }
+h3 { margin-bottom:.35rem; }
+.lede { color:var(--muted); font-size:1.1rem; max-width:700px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin:18px 0; box-shadow:0 8px 24px #5a3b2110; }
+code { background:#f1ebe4; border-radius:5px; padding:.12em .35em; }
+pre { overflow:auto; background:#20252b; color:#f6f2ec; border-radius:10px; padding:16px; line-height:1.5; }
+table { width:100%; border-collapse:collapse; background:var(--card); }
+th,td { text-align:left; vertical-align:top; padding:10px; border-bottom:1px solid var(--line); }
+th { color:var(--accent); }
+.callout { border-left:4px solid var(--accent); padding:12px 16px; background:#f6eee8; }
+.quiz button { margin:.35rem .4rem .35rem 0; padding:.55rem .8rem; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; }
+.quiz button:hover { border-color:var(--accent); }
+#feedback { min-height:1.5em; color:var(--accent); font-weight:600; }
+a { color:var(--accent); }

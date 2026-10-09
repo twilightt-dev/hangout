@@ -26,6 +26,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8081',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api/, ''),
+      },
+      '/imgs': 'http://127.0.0.1:8080',
+    },
+  },
   test: {
     environment: 'jsdom',
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
