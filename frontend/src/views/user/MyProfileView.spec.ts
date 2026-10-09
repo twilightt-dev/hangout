@@ -2,12 +2,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MyProfileView from './MyProfileView.vue'
 
-const { fetchCurrentUser, signOut, getUserInfo, getMyBlogs, getFollowFeed, push, confirm } = vi.hoisted(() => ({
+const { fetchCurrentUser, signOut, getUserInfo, getSignStats, signToday, getMyBlogs, getFollowFeed, push, confirm } = vi.hoisted(() => ({
   fetchCurrentUser: vi.fn(), signOut: vi.fn(), getUserInfo: vi.fn(), getMyBlogs: vi.fn(), getFollowFeed: vi.fn(), push: vi.fn(), confirm: vi.fn(),
+  getSignStats: vi.fn(), signToday: vi.fn(),
 }))
 vi.stubGlobal('confirm', confirm)
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ fetchCurrentUser, signOut }) }))
-vi.mock('@/api/user', () => ({ getUserInfo }))
+vi.mock('@/api/user', () => ({ getUserInfo, getSignStats, signToday }))
 vi.mock('@/api/blog', () => ({ getMyBlogs, getFollowFeed }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
@@ -16,6 +17,7 @@ describe('MyProfileView', () => {
   beforeEach(() => {
     fetchCurrentUser.mockReset().mockResolvedValue({ id: 1, nickName: '我自己' })
     getUserInfo.mockReset().mockResolvedValue({ city: '杭州', introduce: '城市漫游' })
+    getSignStats.mockReset().mockResolvedValue({ date: new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10), month: '202610', todaySigned: false, monthlyDays: 0, continuousDays: 0, previousMonthDays: 0, monthDifference: 0 })
     getMyBlogs.mockReset().mockResolvedValue([{ id: 8, title: '我的第一篇', name: '我自己' }])
     getFollowFeed.mockReset().mockResolvedValue({ list: [], minTime: 0, offset: 0 })
     signOut.mockReset(); push.mockReset(); confirm.mockReset().mockReturnValue(true)

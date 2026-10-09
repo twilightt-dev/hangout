@@ -3,6 +3,7 @@
     <PageState v-if="state !== 'ready'" :state="state" :message="errorMessage" @retry="load" />
     <template v-else-if="user">
       <ProfileHeader :user="user" :info="info" :own-profile="true" :followed="false" :busy="loggingOut" @edit="router.push({ name: 'edit-profile' })" @logout="requestLogout" />
+      <SignInCard />
       <div class="profile-tabs" role="tablist" aria-label="我的内容">
         <button id="notes-tab" type="button" role="tab" aria-controls="notes-panel" :aria-selected="activeTab === 'notes'" @click="activeTab = 'notes'">我的笔记</button>
         <button id="feed-tab" type="button" role="tab" aria-controls="feed-panel" :aria-selected="activeTab === 'feed'" @click="showFeed">关注动态</button>
@@ -34,6 +35,7 @@ import { getUserInfo } from '@/api/user'
 import { getFollowFeed, getMyBlogs } from '@/api/blog'
 import { useAuthStore } from '@/stores/auth'
 import ProfileHeader from '@/components/profile/ProfileHeader.vue'
+import SignInCard from '@/components/profile/SignInCard.vue'
 import BlogCard from '@/components/content/BlogCard.vue'
 import PageState from '@/components/common/PageState.vue'
 import type { Blog, User, UserInfo } from '@/types/api'
