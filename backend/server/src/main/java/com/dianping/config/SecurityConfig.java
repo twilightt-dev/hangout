@@ -65,6 +65,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/blog/*/comments")
                         .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/blog/*/visit", "/shop/*/visit")
+                        .permitAll()
                         .requestMatchers(RegexRequestMatcher.regexMatcher(
                                 HttpMethod.GET, "^/user/[0-9]+$"))
                         .permitAll()

@@ -1,21 +1,25 @@
 <template>
-  <section class="shop-detail-view"><PageState v-if="state !== 'ready'" :state="state" :message="errorMessage" @retry="load"/><template v-else-if="shop"><section class="shop-hero"><div class="gallery"><img v-for="(image, index) in images" :key="image" :src="image" :alt="`${shop.name || '门店'}图片 ${index + 1}`" width="720" height="480" loading="lazy"><span v-if="!images.length" class="gallery__empty">暂无门店图片</span></div><div class="shop-summary"><p>{{ shop.area || '附近' }}</p><h1>{{ shop.name || '未命名门店' }}</h1><strong>★ {{ scoreText }} <span>{{ shop.comments || 0 }} 条评价</span></strong><address>{{ shop.address || '地址待补充' }}</address><p>营业时间：{{ shop.openHours || '以门店公告为准' }}</p></div></section><section class="voucher-section" aria-labelledby="voucher-title"><div class="section-heading"><h2 id="voucher-title">店内优惠</h2><span>{{ vouchers.length ? '选择一张券去探店' : '暂无可领取优惠券' }}</span></div><div v-if="vouchers.length" class="voucher-list"><VoucherCard v-for="voucher in vouchers" :key="voucher.id" :voucher="voucher" :loading="claimingId === voucher.id" @claim="claim"/></div></section></template></section>
+  <section class="shop-detail-view"><PageState v-if="state !== 'ready'" :state="state" :message="errorMessage" @retry="load"/><template v-else-if="shop"><section class="shop-hero"><div class="gallery"><img v-for="(image, index) in images" :key="image" :src="image" :alt="`${shop.name || '门店'}图片 ${index + 1}`" width="720" height="480" loading="lazy"><span v-if="!images.length" class="gallery__empty">暂无门店图片</span></div><div class="shop-summary"><p>{{ shop.area || '附近' }}</p><h1>{{ shop.name || '未命名门店' }}</h1><VisitStatistic kind="shop" :status="visitStatus" :count="visitCount"/><strong>★ {{ scoreText }} <span>{{ shop.comments || 0 }} 条评价</span></strong><address>{{ shop.address || '地址待补充' }}</address><p>营业时间：{{ shop.openHours || '以门店公告为准' }}</p></div></section><section class="voucher-section" aria-labelledby="voucher-title"><div class="section-heading"><h2 id="voucher-title">店内优惠</h2><span>{{ vouchers.length ? '选择一张券去探店' : '暂无可领取优惠券' }}</span></div><div v-if="vouchers.length" class="voucher-list"><VoucherCard v-for="voucher in vouchers" :key="voucher.id" :voucher="voucher" :loading="claimingId === voucher.id" @claim="claim"/></div></section></template></section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { getShop, getVouchers, seckillVoucher } from '@/api/shop'
 import VoucherCard from '@/components/content/VoucherCard.vue'
 import PageState from '@/components/common/PageState.vue'
+import VisitStatistic from '@/components/content/VisitStatistic.vue'
+import { useVisitStatistic } from '@/composables/useVisitStatistic'
 import { useAuthStore } from '@/stores/auth'
 import type { Shop, Voucher } from '@/types/api'
 type ViewState = 'loading' | 'error' | 'empty' | 'ready'
+const visit = useVisitStatistic('shop')
+const { status: visitStatus, count: visitCount } = visit
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const shop = ref<Shop>(); const vouchers = ref<Voucher[]>([]); const state = ref<ViewState>('loading'); const errorMessage = ref(''); const claimingId = ref<number>(); let requestEpoch = 0
 const shopId = computed(() => Number(route.params.id)); const images = computed(() => shop.value?.images?.split(',').map((item) => item.trim()).filter(Boolean) || []); const scoreText = computed(() => Number.isFinite(shop.value?.score) ? (Number(shop.value?.score) / 10).toFixed(1) : '暂无评分')
 function dateValue(value: string | undefined) { return value ? new Date(value.replace(' ', 'T')).getTime() : NaN }
-async function load() { const currentEpoch = ++requestEpoch; shop.value = undefined; vouchers.value = []; claimingId.value = undefined; errorMessage.value = ''; if (!Number.isInteger(shopId.value) || shopId.value < 1) { state.value = 'error'; errorMessage.value = '门店地址无效，请返回后重新选择。'; return } const id = shopId.value; state.value = 'loading'; try { const [shopResult, voucherResult] = await Promise.all([getShop(id), getVouchers(id)]); if (currentEpoch !== requestEpoch) return; if (!shopResult) { state.value = 'error'; errorMessage.value = '门店不存在或已下线，请稍后重试。'; return } shop.value = shopResult; vouchers.value = voucherResult; state.value = 'ready' } catch { if (currentEpoch !== requestEpoch) return; state.value = 'error'; errorMessage.value = '门店详情加载失败，请稍后重试。' } }
+async function load() { const currentEpoch = ++requestEpoch; visit.reset(); shop.value = undefined; vouchers.value = []; claimingId.value = undefined; errorMessage.value = ''; if (!Number.isInteger(shopId.value) || shopId.value < 1) { state.value = 'error'; errorMessage.value = '门店地址无效，请返回后重新选择。'; return } const id = shopId.value; state.value = 'loading'; try { const [shopResult, voucherResult] = await Promise.all([getShop(id), getVouchers(id)]); if (currentEpoch !== requestEpoch || shopId.value !== id) return; if (!shopResult) { state.value = 'error'; errorMessage.value = '门店不存在或已下线，请稍后重试。'; return } shop.value = shopResult; vouchers.value = voucherResult; state.value = 'ready'; void visit.record(id) } catch { if (currentEpoch !== requestEpoch || shopId.value !== id) return; state.value = 'error'; errorMessage.value = '门店详情加载失败，请稍后重试。' } }
 async function claim(voucher: Voucher) {
   if (!auth.isAuthenticated) {
     await router.push({ name: 'login', query: { redirect: route.fullPath } })
@@ -40,6 +44,7 @@ async function claim(voucher: Voucher) {
 }
 void load()
 watch(shopId, () => { void load() })
+onBeforeUnmount(() => { requestEpoch += 1 })
 defineExpose({ claim })
 </script>
 
