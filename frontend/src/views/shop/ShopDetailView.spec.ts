@@ -1,15 +1,16 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ShopDetailView from './ShopDetailView.vue'
 import { ApiError } from '@/api/http'
 
-const { getShop, getVouchers, seckillVoucher, push, messageError, authState } = vi.hoisted(() => ({
-  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
+const { getShop, getVouchers, seckillVoucher, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
+  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
 }))
 
 const route = reactive({ params: { id: '8' }, fullPath: '/shops/8' })
 vi.mock('@/api/shop', () => ({ getShop, getVouchers, seckillVoucher }))
+vi.mock('@/api/traffic', async (importOriginal) => ({ ...await importOriginal<typeof import('@/api/traffic')>(), sendVisit }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
 vi.mock('element-plus', () => ({ ElMessage: { error: messageError, success: vi.fn(), warning: vi.fn() } }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ get isAuthenticated() { return authState.authenticated } }) }))
@@ -21,12 +22,64 @@ function deferred<T>() {
 }
 
 describe('ShopDetailView', () => {
+  const wrappers: Array<ReturnType<typeof mount>> = []
+  const mountView = () => { const wrapper = mount(ShopDetailView); wrappers.push(wrapper); return wrapper }
+  afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()) })
   beforeEach(() => {
+    localStorage.clear(); sendVisit.mockReset().mockResolvedValue({ count: 7 })
     route.params.id = '8'; route.fullPath = '/shops/8'
     getShop.mockReset().mockResolvedValue({ id: 8, name: '巷口咖啡' })
     getVouchers.mockReset().mockResolvedValue([])
     seckillVoucher.mockReset().mockResolvedValue(99)
     push.mockReset(); messageError.mockReset(); authState.authenticated = false
+  })
+
+  it('成功展示后统计近似访客，切页取消旧统计且不接受旧结果', async () => {
+    const old = deferred<{ count: number }>()
+    sendVisit.mockReturnValueOnce(old.promise)
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-test="visit-statistic"]').text()).toBe('统计加载中…')
+    const signal = sendVisit.mock.calls[0]?.[3]?.signal as AbortSignal
+    route.params.id = '9'
+    await nextTick(); await flushPromises()
+    expect(signal.aborted).toBe(true)
+    expect(sendVisit).toHaveBeenCalledTimes(2)
+    expect(sendVisit.mock.calls[1]?.slice(0, 2)).toEqual(['shop', 9])
+    expect(wrapper.text()).toContain('累计访客约 7 位')
+    old.resolve({ count: 100 })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('100')
+  })
+
+  it('无法持久保存游客标识时仍展示门店但不发送统计', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied') })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('巷口咖啡')
+    expect(wrapper.get('[data-test="visit-statistic"]').text()).toBe('暂无统计')
+    expect(sendVisit).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
+  })
+
+  it('空详情与无效门店地址不上报，卸载取消进行中的统计', async () => {
+    getShop.mockResolvedValueOnce(null)
+    const empty = mountView()
+    await flushPromises()
+    expect(sendVisit).not.toHaveBeenCalled()
+    empty.unmount()
+    route.params.id = 'invalid'
+    const invalid = mountView()
+    await flushPromises()
+    expect(sendVisit).not.toHaveBeenCalled()
+    invalid.unmount()
+    route.params.id = '8'
+    sendVisit.mockReturnValue(new Promise(() => {}))
+    const shown = mountView()
+    await flushPromises()
+    const signal = sendVisit.mock.calls[0]?.[3]?.signal as AbortSignal
+    shown.unmount()
+    expect(signal.aborted).toBe(true)
   })
 
   it('未登录领取优惠券时跳转登录并保留当前地址', async () => {

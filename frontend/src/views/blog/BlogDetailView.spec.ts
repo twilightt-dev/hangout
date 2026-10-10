@@ -3,14 +3,15 @@ import { nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BlogDetailView from './BlogDetailView.vue'
 
-const { getBlog, getBlogLikes, likeBlog, getShop, getFollowStatus, setFollow, getCurrentUser, push, authState } = vi.hoisted(() => ({
-  getBlog: vi.fn(), getBlogLikes: vi.fn(), likeBlog: vi.fn(), getShop: vi.fn(), getFollowStatus: vi.fn(), setFollow: vi.fn(), getCurrentUser: vi.fn(), push: vi.fn(), authState: { authenticated: false, user: null as null | { id: number } },
+const { getBlog, getBlogLikes, likeBlog, getShop, getFollowStatus, setFollow, getCurrentUser, sendVisit, push, authState } = vi.hoisted(() => ({
+  getBlog: vi.fn(), getBlogLikes: vi.fn(), likeBlog: vi.fn(), getShop: vi.fn(), getFollowStatus: vi.fn(), setFollow: vi.fn(), getCurrentUser: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), authState: { authenticated: false, user: null as null | { id: number } },
 }))
 const route = reactive({ params: { id: '8' as string | undefined }, fullPath: '/blogs/8' })
 vi.mock('@/api/blog', () => ({ getBlog, getBlogLikes, likeBlog }))
 vi.mock('@/api/shop', () => ({ getShop }))
 vi.mock('@/api/follow', () => ({ getFollowStatus, setFollow }))
 vi.mock('@/api/user', () => ({ getCurrentUser }))
+vi.mock('@/api/traffic', async (importOriginal) => ({ ...await importOriginal<typeof import('@/api/traffic')>(), sendVisit }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ get isAuthenticated() { return authState.authenticated }, get user() { return authState.user } }) }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), success: vi.fn() } }))
@@ -20,9 +21,82 @@ describe('BlogDetailView', () => {
   const mountView = () => { const wrapper = mount(BlogDetailView); wrappers.push(wrapper); return wrapper }
   afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()) })
   beforeEach(() => {
+    localStorage.clear(); sendVisit.mockReset().mockResolvedValue({ count: 12 })
     route.params.id = '8'; route.fullPath = '/blogs/8'; authState.authenticated = false; authState.user = null; push.mockReset()
     getBlog.mockReset().mockResolvedValue({ id: 8, userId: 3, shopId: 5, name: '小林', title: '午后咖啡', content: '<img src=x onerror="alert(1)">\n保留换行', images: 'https://img.example/a.jpg,https://img.example/b.jpg', liked: 3 })
     getBlogLikes.mockReset().mockResolvedValue([]); getShop.mockReset().mockResolvedValue({ id: 5, name: '巷口咖啡' }); likeBlog.mockReset().mockResolvedValue(undefined); getFollowStatus.mockReset().mockResolvedValue(false); setFollow.mockReset().mockResolvedValue(undefined); getCurrentUser.mockReset().mockResolvedValue({ id: 1 })
+  })
+
+  it('成功展示后上报博客 PV，关联店铺查询和点赞刷新不增加访问', async () => {
+    authState.authenticated = true
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('累计浏览 12 次')
+    expect(sendVisit).toHaveBeenCalledTimes(1)
+    expect(sendVisit.mock.calls[0]?.slice(0, 2)).toEqual(['blog', 8])
+    await wrapper.get('[data-test="blog-like"]').trigger('click')
+    await flushPromises()
+    expect(sendVisit).toHaveBeenCalledTimes(1)
+  })
+
+  it('统计拒绝时仍显示正文并显示暂无统计', async () => {
+    sendVisit.mockRejectedValue(Object.assign(new Error('limited'), { code: 429 }))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('午后咖啡')
+    expect(wrapper.get('[data-test="visit-statistic"]').text()).toBe('暂无统计')
+    expect(sendVisit).toHaveBeenCalledTimes(1)
+  })
+
+  it('详情失败以及卸载后到达的详情都不上报', async () => {
+    getBlog.mockRejectedValueOnce(new Error('network'))
+    const failed = mountView()
+    await flushPromises()
+    expect(failed.text()).toContain('博客详情加载失败')
+    expect(sendVisit).not.toHaveBeenCalled()
+    let finish!: (value: { id: number; title: string }) => void
+    getBlog.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const gone = mountView()
+    gone.unmount()
+    finish({ id: 8, title: '已离开的博客' })
+    await flushPromises()
+    expect(sendVisit).not.toHaveBeenCalled()
+  })
+
+  it('不存在和无效路由不上报，重新进入同一博客使用新的事件 ID', async () => {
+    getBlog.mockResolvedValueOnce(null)
+    const empty = mountView()
+    await flushPromises()
+    expect(empty.text()).toContain('博客不存在')
+    expect(sendVisit).not.toHaveBeenCalled()
+    empty.unmount()
+    route.params.id = 'invalid'
+    const invalid = mountView()
+    await flushPromises()
+    expect(invalid.text()).toContain('博客地址无效')
+    expect(sendVisit).not.toHaveBeenCalled()
+    invalid.unmount()
+    route.params.id = '8'
+    const shown = mountView()
+    await flushPromises()
+    const first = sendVisit.mock.calls[0]?.[2]
+    shown.unmount()
+    const reopened = mountView()
+    await flushPromises()
+    const second = sendVisit.mock.calls[1]?.[2]
+    expect(first.visitorId).toBe(second.visitorId)
+    expect(first.eventId).not.toBe(second.eventId)
+    reopened.unmount()
+  })
+
+  it('统计上报在详情正文已写入 DOM 后执行', async () => {
+    const wrapper = mountView()
+    sendVisit.mockImplementation(() => {
+      expect(wrapper.get('[data-test="blog-body"]').text()).toContain('保留换行')
+      return Promise.resolve({ count: 1 })
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('累计浏览 1 次')
   })
 
   it('将博客正文作为纯文本渲染，不执行存量 HTML', async () => {
