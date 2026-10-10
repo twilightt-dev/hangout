@@ -5,7 +5,10 @@ backend/**/*.iml
 backend/.classpath
 backend/.project
 backend/.settings/
-docs
+docs/*
+!docs/adr/
+docs/adr/*
+!docs/adr/0007-博客与店铺访问统计采用展示上报和近似访客计数.md
 lessions
 
 # Vue / Node
