@@ -164,6 +164,9 @@ export interface Comment {
   content?: string
   createTime?: DateValue
   updateTime?: DateValue
+  liked?: number
+  isLike?: boolean | null
+  likeAvailable?: boolean
 }
 
 export interface PageResult<T> {

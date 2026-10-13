@@ -7,7 +7,7 @@ vi.mock('./http', () => ({
   dataOf: (request: unknown) => request,
 }))
 
-import { createBlogComment, getBlog, getBlogComments, publishBlog } from './blog'
+import { createBlogComment, getBlog, getBlogComments, publishBlog, toggleBlogCommentLike } from './blog'
 
 describe('blog detail API', () => {
   beforeEach(() => {
@@ -35,6 +35,10 @@ describe('blog detail API', () => {
     await getBlogComments(123, 2)
 
     expect(get).toHaveBeenCalledWith('/blog/123/comments', { params: { current: 2 } })
+  })
+  it('评论点赞携带禁止自动重放标记且不提交用户身份', async () => {
+    await toggleBlogCommentLike(8, 21)
+    expect(post).toHaveBeenCalledWith('/blog/8/comments/21/like', undefined, { skipAuthReplay: true })
   })
 
   it('creates a blog comment through the nested comments endpoint', async () => {
