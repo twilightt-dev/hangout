@@ -1,5 +1,8 @@
 # 九模块 DDD 渐进迁移实施计划
 
+> 历史实施记录：评论 DDD 分层已于 2026-10-14 按用户决定撤回，点赞保留并迁入传统 Service。当前源码以 ADR 0010 和 backend/DDD.md 为准。
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将当前后端迁入九模块，保持已有行为，并完整实现评论创建与分页查询试点。

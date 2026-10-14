@@ -4,15 +4,15 @@
 
 | 模块 | 当前职责 |
 |---|---|
-| domain | 纯 Java 评论模型、内容规则与仓储契约 |
-| application | 评论创建/查询/点赞与计数同步应用服务、读模型及能力端口 |
-| infrastructure | 评论 DO、Mapper、仓储实现，博客计数、作者与身份适配器 |
-| facade | CommentFacade 调用新用例并转换原兼容响应 |
+| domain | 预留领域模型，当前无评论实现 |
+| application | 预留应用流程，当前无评论实现 |
+| infrastructure | 预留基础设施，当前无评论实现 |
+| facade | 预留门面，当前评论直接调用 Service |
 | controller | HTTP、过滤器、安全及全局异常处理 |
-| job | 已有 Feed 与评论点赞计数同步定时工作器 |
+| job | 已有 Feed 定时工作器，评论不再后台同步 |
 | listener | 空的消息入口模块，本轮不新增消息功能 |
-| service | 原实体、Mapper、服务、工具及技术配置 |
-| start | 启动类、新旧 Mapper 扫描配置、运行配置及跨模块测试 |
+| service | 原实体、Mapper、服务、工具及技术配置，包含全部评论业务 |
+| start | 启动类、已有 Mapper 扫描配置、运行配置及跨模块测试 |
 
 执行默认离线测试与全 reactor 打包（不需要 clean）：
 
@@ -39,23 +39,25 @@ java -jar D:/devprojects/java-projects/comment/backend/start/target/start.jar
 例如，在已准备好隔离 Redis 后运行 ID 和锁测试：
 
 ```powershell
-mvn -f D:/devprojects/java-projects/comment/backend/pom.xml -pl start -am -Dlegacy.redis.port=16380 '-Dtest=RedisIdWorkerTest,RedissonTest' -Dsurefire.failIfNoSpecifiedTests=false test -B -ntp
+mvn -f D:/devprojects/java-projects/comment/backend/pom.xml -pl start -am -Dlegacy.redis.port=16380 '-Dtest=RedisIdWorkerTest,RedissonTest' '-Dsurefire.failIfNoSpecifiedTests=false' test -B -ntp
 ```
 
-本轮已完成九模块迁移与评论创建/分页试点，评论入口经过新 facade/application/domain/infrastructure 链路；其余旧业务按需迁移。领域、应用和评论 H2/Mapper/事务/安全 HTTP 整链共新增 31 例，默认外部测试开关未开启时跳过 9 例。H2 使用 MySQL 兼容模式验证实际 SQL 和事务，不能替代真实 MySQL 锁/隔离行为或 Redis 集成验证。DDD 迁移阶段未开启外部环境测试；后续点赞实施已单独运行真实隔离 Redis 测试。
+九模块整理已保留；评论试点已撤回，当前评论创建、查询和点赞统一走传统 Service，只有入口与定时调度位于 controller/job。默认外部测试开关未开启时会跳过外部环境用例。H2 使用 MySQL 兼容模式验证实际 SQL 和事务，不能替代真实 MySQL 锁/隔离行为或 Redis 集成验证。DDD 迁移阶段未开启外部环境测试；后续点赞实施已单独运行真实隔离 Redis 测试。
 
 其他服务内已有 `Scheduled`、`PostConstruct` 及秒杀消费逻辑暂留 service，不重复装配；FeedTaskWorker 在 job 单份装配。九模块与评论试点验收后允许开发新功能，仍按需迁移旧业务，不包含任务引擎、保障申诉或 MQ。依赖图及下一个业务迁移步骤见 [DDD 架构](DDD.md)。
 
 ## 评论点赞运行要求
 
-已有一级评论支持登录后点击切换、自赞，列表新增 liked/isLike/likeAvailable。Redis 为关系事实来源，MySQL 为最终一致计数。上线前必须执行增量 DDL 并逐条核对历史启用；未核对代次为 0 的评论保留数量且暂停点赞。完整步骤见 [评论点赞部署与恢复](../docs/design/评论点赞部署与恢复.md)。
+已有一级评论支持登录后点击切换、自赞，列表返回 liked/isLike/likeAvailable。Redis Set 保存用户关系，MySQL liked 直接加减；数据库不保存用户关系，两个存储可能部分成功，失败后人工核对，不再自动同步或恢复。实现直接位于 BlogCommentsServiceImpl，见 [ADR 0011](../docs/adr/0011-评论点赞收拢到Service并取消自动同步.md)。
 
-运行专用隔离 Redis 测试（先独立启动无持久化测试实例，不能指向现有 Redis）：
+不需要执行 20261014_comment_like.sql 的旧增量 DDL。若旧迁移已在其他环境执行，额外列暂留；新代码兼容原表，不清空数据、不删除列。沿用原 `{comment:likes:分区}:评论ID:users` Set。上线前停止旧任务并核对待同步数量及历史异常，Redis 非零关系与数据库数量的完整校验由部署人员单独处理。
+
+运行专用隔离 Redis/H2/Redisson 测试（须先独立启动测试实例，不能指向已有 Redis）：
 
 ```powershell
-mvn -f D:/devprojects/java-projects/comment/backend/pom.xml -pl start -am '-Dtest=CommentLike*IntegrationTest' '-Dsurefire.failIfNoSpecifiedTests=false' '-DcommentLikeRedisTest=true' '-DcommentLikeRedisPort=18643' test -B -ntp
+mvn -f D:/devprojects/java-projects/comment/backend/pom.xml -pl start -am '-Dtest=CommentLikePersistenceRedisIntegrationTest,CommentPilotIntegrationTest,BlogCommentsServiceImplTest' '-Dsurefire.failIfNoSpecifiedTests=false' '-DcommentLikeRedisTest=true' '-DcommentLikeRedisPort=18646' test -B -ntp
 ```
 
-测试使用随机命名空间，默认关闭。实现阶段使用 WSL 内自行构建的 Redis 7.4.2 专用实例、随机 H2 数据库验证 Lua 并发、失败后重试、关系丢失暂停及恢复代次；没有连接现有 MySQL/Redis。生产 MySQL 锁隔离、Redis Cluster 部署和完整应用启动仍需实际隔离环境验收。
+Redis 集成测试默认关闭；随机 H2 数据库和随机评论 ID 配合专用 Redis，验证原 Set 兼容、两次点击、同用户与不同用户并发、SQL 失败、关系丢失和错误键类型。HTTP/H2 测试还验证部分 Redis 写失败后只增加一次数据库数量、故障时列表仍可查看。真实 MySQL 隔离行为与完整应用启动需另行验收。
 
-2026-10-14 完整验证：九模块 package 成功，后端 163 例中 154 例通过、9 例既有外部测试跳过（评论点赞的 11 例真实隔离 Redis/组合测试已开启并通过）；前端 27 个测试文件、160 例全部通过，typecheck 与 build 通过。旧 target 在工作区归档后重新构建，未使用 clean。统计来自本轮完整测试报告；真实数据库迁移未执行。
+2026-10-14 简化后验证：九模块 package 成功；36 个后端测试套件共 135 例，126 通过、9 例既有外部测试跳过，其中 7 例真实隔离 Redis/H2/Redisson 测试全部通过。前端 27 文件、160 例通过。Boot JAR 中已无旧点赞辅助类、点赞 Lua 或同步 Job；Git HEAD/index 保持不变，未执行真实数据库或 Redis 数据迁移。

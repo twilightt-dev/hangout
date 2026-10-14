@@ -1,5 +1,10 @@
 # 评论点赞实现计划
 
+> 2026-10-14 后续决定：点赞简化为请求内直接更新，自动同步与恢复方案已被 [ADR 0011](../../adr/0011-评论点赞收拢到Service并取消自动同步.md) 取代。下文保留历史决策与实现记录；当前说明见根 CONTEXT.md 和 backend/DDD.md。
+
+> 历史实施记录：评论 DDD 分层已于 2026-10-14 按用户决定撤回，点赞保留并迁入传统 Service。当前源码以 ADR 0010 和 backend/DDD.md 为准。
+
+
 > 执行方式：按已确认的测试边界进行 TDD；领域与应用、基础设施、前端分别开发，最后集成并执行 Standards/Spec 两轴审查。保留当前 DDDUpgrade 工作目录与现有暂存内容。
 
 目标：实现一级评论点赞切换、故障降级和可重试计数同步。
@@ -20,9 +25,9 @@
 
 ## 共享接口
 
-领域包 com.dianping.domain.comment：Comment.restore(Long id,Long blogId,Long authorId,CommentContent content,Long parentId,Long answerId,Integer status)，ensureLikeable()；CommentLikeId(Long commentId,Long userId)；CommentLike.restore(CommentLikeId,boolean).toggle() 返回 CommentLikeChange(id,expectedLiked,targetLiked)。
+领域包 com.dianping.domain.comment：Comment.restore(Long id,Long blogId,Long authorId,CommentContent content,Long parentId,Long answerId,Integer status)，ensureLikeable()；CommentLike.Id(Long commentId,Long userId)；CommentLike.restore(CommentLike.Id,boolean).toggle() 返回 CommentLike.Change(id,expectedLiked,targetLiked)。
 
-CommentRepository 保留 insert，新增 Comment findById(Long id)。CommentLikeRepository：CommentLike findState(CommentLikeId id,long epoch,boolean allowInitialize)；CommentLikeApplyResult tryApply(CommentLikeChange change,long epoch)。结果 record(boolean applied,boolean isLike,long liked)，applied=false 表示确定未执行的竞争。
+CommentRepository 保留 insert，新增 Comment findById(Long id)。CommentLikeRepository：CommentLike findState(CommentLike.Id id,long epoch,boolean allowInitialize)；CommentLikeRepository.ApplyResult tryApply(CommentLike.Change change,long epoch)。结果 record(boolean applied,boolean isLike,long liked)，applied=false 表示确定未执行的竞争。
 
 应用 port：CommentLikeMetadata(long epoch,long version,long liked,boolean initialized)，enabled() 为 epoch>0；canInitialize() 仅在已启用、版本与数量均为零且未初始化时成立。初始化在 MySQL 行锁内核验，持久化 initialized 后才允许切换，防止首次同步前 Redis 数据丢失被当成新关系。CommentLikeEligibilityPort.metadata(Long id)。CommentLikeReadPort.findStates(List<Long> ids,Long userId) 返回 Map<Long,CommentLikeStatus>，状态 record(Boolean isLike,boolean available)。匿名 userId=null。
 

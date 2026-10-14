@@ -2,119 +2,182 @@ package com.dianping.comment;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
-import com.dianping.application.comment.like.*;
-import com.dianping.application.comment.like.sync.*;
-import com.dianping.application.comment.port.CurrentCommentAuthor;
-import com.dianping.domain.comment.*;
-import com.dianping.infrastructure.persistence.adapter.comment.*;
-import com.dianping.infrastructure.persistence.mapper.comment.CommentMapper;
-import com.dianping.infrastructure.persistence.repository.comment.CommentRepositoryImpl;
-import com.dianping.infrastructure.redis.comment.*;
+import com.dianping.config.MybatisConfig;
+import com.dianping.dto.UserDTO;
+import com.dianping.entity.BlogComments;
+import com.dianping.mapper.BlogCommentsMapper;
+import com.dianping.service.BlogCommentsService;
+import com.dianping.service.UserService;
+import com.dianping.service.impl.BlogCommentsServiceImpl;
+import com.dianping.utils.UserHolder;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.annotation.MapperScan;
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.*;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.*;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
-import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.web.server.ResponseStatusException;
+
 import javax.sql.DataSource;
 import java.util.*;
-import static org.assertj.core.api.Assertions.*;
+import java.util.concurrent.*;
 
-/** 随机内存数据库与专用 Redis 实例，验证生产适配器之间的协议。 */
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+
+/** 使用专用 Redis、真实 Redisson 锁和随机 H2；不加载生产配置，不需要同步字段。 */
 @SpringJUnitConfig(CommentLikePersistenceRedisIntegrationTest.Config.class)
 @EnabledIfSystemProperty(named = "commentLikeRedisTest", matches = "true")
 class CommentLikePersistenceRedisIntegrationTest {
-    @Autowired CommentRepositoryImpl comments;
-    @Autowired ToggleCommentLikeService toggle;
-    @Autowired SyncCommentLikeCountsService sync;
-    @Autowired CommentLikeRedisStore store;
+    @Autowired BlogCommentsService service;
+    @Autowired BlogCommentsMapper mapper;
     @Autowired StringRedisTemplate redis;
     @Autowired JdbcTemplate jdbc;
-    @Autowired CommentLikeReadAdapter read;
+    private Long id;
+    private long blogId;
 
-    @Test void unsynchronizedFirstLikeCannotBeReinitializedAfterRedisLoss() {
-        Long id = comments.insert(Comment.create(9L, 7L, CommentContent.of("第一条")));
-        assertThat(toggle.toggle(9L, id).isLike()).isTrue();
-        assertThat(comments.metadata(id).initialized()).isTrue();
-        assertThat(comments.metadata(id).version()).isZero();
-        String prefix = store.pendingKey(id).replace("pending", id.toString());
-        // 移到隔离备查键模拟丢失，不触碰已有环境数据。
-        redis.rename(prefix + ":meta", prefix + ":meta:lost");
-        redis.rename(prefix + ":users", prefix + ":users:lost");
-        assertThatThrownBy(() -> toggle.toggle(9L, id)).isInstanceOf(CommentLikeUnavailableException.class);
-        assertThat(read.findStates(List.of(id), 7L).get(id).available()).isFalse();
-        assertThat(comments.metadata(id).liked()).isZero();
+    @BeforeEach void createComment() {
+        blogId = 1000000L + Math.floorMod(UUID.randomUUID().getMostSignificantBits(), 1000000000000L);
+        jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(?,0)", blogId);
+        BlogComments comment = new BlogComments().setBlogId(blogId).setUserId(7L).setParentId(0L)
+                .setAnswerId(0L).setContent("隔离测试").setStatus(0).setLiked(0L);
+        mapper.insert(comment);
+        id = comment.getId();
+        identity(7);
+    }
+    @AfterEach void clearIdentity() { UserHolder.removeUser(); }
+    private static void identity(long userId) {
+        UserDTO user = new UserDTO(); user.setId(userId); UserHolder.saveUser(user);
+    }
+    private String key() { return "{comment:likes:" + Math.floorMod(id, 4) + "}:" + id + ":users"; }
+
+    @Test void twoClicksUpdateDatabaseImmediatelyAndDoNotCreateSyncMetadata() {
+        assertThat(service.toggleCommentLike(blogId, id).getData()).isEqualTo(new BlogCommentsService.LikeResult(1, true));
+        assertThat(mapper.selectById(id).getLiked()).isEqualTo(1);
+        assertThat(redis.opsForSet().members(key())).containsExactly("7");
+        assertThat(service.toggleCommentLike(blogId, id).getData()).isEqualTo(new BlogCommentsService.LikeResult(0, false));
+        assertThat(mapper.selectById(id).getLiked()).isZero();
+        assertThat(redis.opsForSet().isMember(key(), "7")).isFalse();
+        assertThat(redis.hasKey(key().replace(":users", ":meta"))).isFalse();
+        assertThat(redis.hasKey("{comment:likes:" + Math.floorMod(id, 4) + "}:pending")).isFalse();
     }
 
-    @Test void failedMySqlProjectionIsRetriedAndOldAckDoesNotDiscardNewLike() throws Exception {
-        Long id = comments.insert(Comment.create(9L, 7L, CommentContent.of("重试")));
-        toggle.toggle(9L, id);
-        jdbc.update("UPDATE tb_blog_comments SET sync_blocked=TRUE WHERE id=?", id);
-        sync.synchronize(100);
-        assertThat(comments.metadata(id).version()).isZero();
-        jdbc.update("UPDATE tb_blog_comments SET sync_blocked=FALSE WHERE id=?", id);
-        Thread.sleep(1100);
-        sync.synchronize(100);
-        assertThat(comments.metadata(id).liked()).isEqualTo(1); assertThat(comments.metadata(id).version()).isEqualTo(1);
-        assertThat(store.pending(100)).noneMatch(s -> s.commentId().equals(id));
-        toggle.toggle(9L, id);
-        sync.synchronize(100);
-        assertThat(comments.metadata(id).liked()).isZero(); assertThat(comments.metadata(id).version()).isEqualTo(2);
+    @Test void oldRelationSetIsUsedWithoutReinitializationOrMigration() {
+        redis.opsForSet().add(key(), "7");
+        jdbc.update("UPDATE tb_blog_comments SET liked=1 WHERE id=?", id);
+        var page = service.queryComments(blogId, 1).getData();
+        var item = page.getRecords().stream().filter(vo -> vo.getId().equals(id)).findFirst().orElseThrow();
+        assertThat(item.getIsLike()).isTrue();
+        assertThat(item.isLikeAvailable()).isTrue();
+        assertThat(service.toggleCommentLike(blogId, id).getData().isLike()).isFalse();
+        assertThat(mapper.selectById(id).getLiked()).isZero();
     }
 
-    @Test void auditedRecoveryRebuildsPendingAndFencesOldEpoch() {
-        Long id = comments.insert(Comment.create(9L, 7L, CommentContent.of("恢复")));
-        toggle.toggle(9L, id); sync.synchronize(100);
-        var old = new CommentLikeCountSnapshot(id, 1, 100, 19);
-        DefaultRedisScript<List> recovery = new DefaultRedisScript<>();
-        recovery.setLocation(new ClassPathResource("lua/comment-like-recover.lua")); recovery.setResultType(List.class);
-        String prefix = store.pendingKey(id).replace("pending", id.toString());
-        List<String> keys = List.of(prefix + ":users", prefix + ":meta", store.pendingKey(id));
-        assertThat(redis.execute(recovery, keys, "1", "1", "2", "0", id.toString())).containsExactly(-1L);
-        assertThat(redis.execute(recovery, keys, "1", "1", "2", "1", id.toString())).containsExactly(1L, 1L);
-        jdbc.update("UPDATE tb_blog_comments SET like_epoch=2,like_version=0,like_initialized=TRUE WHERE id=?", id);
-        var projection = new CommentLikeCountSyncAdapter(store, mapper);
-        assertThat(projection.writeCount(old)).isFalse();
-        assertThatThrownBy(() -> store.apply(new CommentLikeChange(new CommentLikeId(id, 7L), true, false), 1)).isInstanceOf(CommentLikeUnavailableException.class);
-        sync.synchronize(100);
-        assertThat(comments.metadata(id).epoch()).isEqualTo(2); assertThat(comments.metadata(id).version()).isEqualTo(1);
-        assertThat(comments.metadata(id).liked()).isEqualTo(1);
+    @Test void concurrentUsersDoNotLoseDatabaseIncrements() throws Exception {
+        try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
+            List<Callable<Boolean>> calls = new ArrayList<>();
+            for (long userId = 1; userId <= 24; userId++) {
+                long current = userId;
+                calls.add(() -> {
+                    identity(current);
+                    try { return service.toggleCommentLike(blogId, id).getCode() == 1; }
+                    finally { UserHolder.removeUser(); }
+                });
+            }
+            for (Future<Boolean> done : pool.invokeAll(calls)) assertThat(done.get()).isTrue();
+        }
+        assertThat(mapper.selectById(id).getLiked()).isEqualTo(24);
+        assertThat(redis.opsForSet().size(key())).isEqualTo(24);
     }
-    @Autowired CommentMapper mapper;
+
+    @Test void simultaneousClicksFromOneUserAreTwoSerializedSwitches() throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        Callable<Boolean> click = () -> {
+            start.await(); identity(7);
+            try { return service.toggleCommentLike(blogId, id).getCode() == 1; }
+            finally { UserHolder.removeUser(); }
+        };
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(click); var second = pool.submit(click); start.countDown();
+            assertThat(first.get(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(second.get(5, TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(mapper.selectById(id).getLiked()).isZero();
+        assertThat(redis.opsForSet().isMember(key(), "7")).isFalse();
+    }
+
+    @Test void rejectedDatabaseWriteDoesNotCreateARedisRelation() {
+        jdbc.update("UPDATE tb_blog_comments SET reject_likes=TRUE WHERE id=?", id);
+        assertThatThrownBy(() -> service.toggleCommentLike(blogId, id)).isInstanceOf(ResponseStatusException.class);
+        assertThat(mapper.selectById(id).getLiked()).isZero();
+        assertThat(redis.opsForSet().isMember(key(), "7")).isFalse();
+    }
+
+    @Test void lostRelationsKeepCountAndDisableLikesWithoutRebuilding() {
+        service.toggleCommentLike(blogId, id);
+        redis.rename(key(), key() + ":lost");
+        assertThat(service.toggleCommentLike(blogId, id).getMsg()).isEqualTo("评论点赞数据待核对");
+        assertThat(mapper.selectById(id).getLiked()).isEqualTo(1);
+        var item = service.queryComments(blogId, 1).getData().getRecords().stream()
+                .filter(vo -> vo.getId().equals(id)).findFirst().orElseThrow();
+        assertThat(item.getLiked()).isEqualTo(1);
+        assertThat(item.getIsLike()).isNull();
+        assertThat(item.isLikeAvailable()).isFalse();
+        assertThat(redis.hasKey(key())).isFalse();
+    }
+
+    @Test void corruptRedisKeyLeavesDatabaseUntouchedAndListStillLoads() {
+        redis.opsForValue().set(key(), "隔离测试错误类型");
+        assertThatThrownBy(() -> service.toggleCommentLike(blogId, id)).isInstanceOf(ResponseStatusException.class);
+        assertThat(mapper.selectById(id).getLiked()).isZero();
+        var page = service.queryComments(blogId, 1);
+        assertThat(page.getCode()).isEqualTo(1);
+        assertThat(page.getData().getRecords()).allSatisfy(vo -> assertThat(vo.isLikeAvailable()).isFalse());
+    }
 
     @Configuration
-    @EnableTransactionManagement
-    @MapperScan("com.dianping.infrastructure.persistence.mapper.comment")
-    @Import({CommentRepositoryImpl.class, RedisCommentLikeRepository.class, CommentLikeReadAdapter.class,
-            CommentLikeCountSyncAdapter.class, ToggleCommentLikeService.class, SyncCommentLikeCountsService.class})
+    @MapperScan("com.dianping.mapper")
+    @Import({BlogCommentsServiceImpl.class, MybatisConfig.class})
     static class Config {
-        @Bean DataSource dataSource() { return new DriverManagerDataSource("jdbc:h2:mem:likes_" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", ""); }
+        @Bean DataSource dataSource() {
+            return new DriverManagerDataSource("jdbc:h2:mem:simple_likes_" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        }
         @Bean JdbcTemplate jdbc(DataSource ds) {
             JdbcTemplate jdbc = new JdbcTemplate(ds);
-            jdbc.execute("CREATE TABLE tb_blog_comments(id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id BIGINT,blog_id BIGINT,parent_id BIGINT,answer_id BIGINT,content VARCHAR(255),liked BIGINT DEFAULT 0,like_epoch BIGINT DEFAULT 0,like_version BIGINT DEFAULT 0,like_initialized BOOLEAN DEFAULT FALSE,status INT,create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,sync_blocked BOOLEAN DEFAULT FALSE,CONSTRAINT reject_sync CHECK(sync_blocked=FALSE OR liked=0))");
+            jdbc.execute("CREATE TABLE tb_blog(id BIGINT PRIMARY KEY,shop_id BIGINT,user_id BIGINT,title VARCHAR(255),images VARCHAR(255),content TEXT,liked INT,comments INT,create_time TIMESTAMP,update_time TIMESTAMP)");
+            jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(9,0)");
+            // 使用随机起始 ID，避免与其他测试用例的 Redis Set 冲突。
+            long seed = 1000000L + Math.floorMod(UUID.randomUUID().getMostSignificantBits(), 1000000000000L);
+            jdbc.execute("CREATE TABLE tb_blog_comments(id BIGINT GENERATED BY DEFAULT AS IDENTITY(START WITH " + seed + ") PRIMARY KEY,user_id BIGINT,blog_id BIGINT,parent_id BIGINT,answer_id BIGINT,content VARCHAR(255),liked BIGINT DEFAULT 0,status INT,create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,reject_likes BOOLEAN DEFAULT FALSE,CONSTRAINT reject_increment CHECK(reject_likes=FALSE OR liked=0))");
             return jdbc;
         }
-        @Bean SqlSessionTemplate sqlSessionTemplate(DataSource ds, JdbcTemplate initialized) throws Exception {
-            var configuration = new MybatisConfiguration(); configuration.setMapUnderscoreToCamelCase(true);
-            var factory = new MybatisSqlSessionFactoryBean(); factory.setDataSource(ds); factory.setConfiguration(configuration); factory.afterPropertiesSet();
+        @Bean SqlSessionTemplate sqlSessionTemplate(DataSource ds, JdbcTemplate initialized, MybatisConfig plugins) throws Exception {
+            MybatisConfiguration configuration = new MybatisConfiguration(); configuration.setMapUnderscoreToCamelCase(true);
+            MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
+            factory.setDataSource(ds); factory.setConfiguration(configuration); factory.setPlugins(plugins.mybatisPlusInterceptor()); factory.afterPropertiesSet();
             return new SqlSessionTemplate(factory.getObject());
         }
-        @Bean DataSourceTransactionManager transactions(DataSource ds) { return new DataSourceTransactionManager(ds); }
-        @Bean CurrentCommentAuthor identity() { return () -> 7L; }
-        @Bean(destroyMethod = "destroy") LettuceConnectionFactory redisFactory() {
+        @Bean UserService users() { return mock(UserService.class); }
+        private static int port() {
             int port = Integer.getInteger("commentLikeRedisPort", 0);
             if (port < 1024 || port == 6379) throw new IllegalArgumentException("必须使用专用隔离端口");
-            return new LettuceConnectionFactory("127.0.0.1", port);
+            return port;
         }
+        @Bean(destroyMethod = "destroy") LettuceConnectionFactory redisFactory() { return new LettuceConnectionFactory("127.0.0.1", port()); }
         @Bean StringRedisTemplate redis(LettuceConnectionFactory factory) { return new StringRedisTemplate(factory); }
-        @Bean CommentLikeRedisStore store(StringRedisTemplate redis) { return new CommentLikeRedisStore(redis, "integration:" + UUID.randomUUID()); }
+        @Bean(destroyMethod = "shutdown") RedissonClient redisson() {
+            org.redisson.config.Config config = new org.redisson.config.Config();
+            config.setThreads(2).setNettyThreads(2);
+            config.useSingleServer().setAddress("redis://127.0.0.1:" + port()).setConnectionMinimumIdleSize(1).setConnectionPoolSize(8)
+                    .setSubscriptionConnectionMinimumIdleSize(1).setSubscriptionConnectionPoolSize(2);
+            return Redisson.create(config);
+        }
     }
 }

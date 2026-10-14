@@ -1,6 +1,4 @@
--- 增量 DDL：先核对备份并由部署人员执行。本文件不自动执行，不修改历史 liked。
--- like_epoch=0 保持历史评论暂停点赞；只能在关系核对后单独启用。
-ALTER TABLE tb_blog_comments
-    ADD COLUMN like_epoch BIGINT NOT NULL DEFAULT 0 COMMENT '点赞启用代次，0为未核对',
-    ADD COLUMN like_version BIGINT NOT NULL DEFAULT 0 COMMENT '已应用计数版本',
-    ADD COLUMN like_initialized BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否已完成Redis初始化';
+-- 历史迁移已停用，参见 ADR 0011：评论点赞改为请求内直接更新 liked。
+-- 新实现只使用原表字段，不需要新增 like_epoch、like_version、like_initialized。
+-- 若旧迁移已在某环境执行，额外列暂留；本文件不删除列、不修改任何历史数据。
+-- 上线前核对旧待同步数量与用户关系；异常数据由部署人员单独确认处理。

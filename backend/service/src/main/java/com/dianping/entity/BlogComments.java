@@ -60,7 +60,7 @@ public class BlogComments implements Serializable {
     /**
      * 点赞数
      */
-    private Integer liked;
+    private Long liked;
 
     /**
      * 状态，0：正常，1：被举报，2：禁止查看

@@ -61,6 +61,10 @@ public class RedisConstants {
     public static final String BLOG_LIKE_KEY = "blog:like:";
     public static final String BLOG_LIKED_LOCK_KEY = "blog:like:locked:";
 
+    // 评论点赞：保持原 Set 命名，避免迁移已有用户关系。
+    public static final String COMMENT_LIKE_KEY = "comment:likes";
+    public static final String COMMENT_LIKED_LOCK_KEY = "comment:like:locked:";
+
     // 用户关注列表，集合成员为被关注用户 ID
     public static final String FOLLOW_USER_KEY = "follow:user:";
 

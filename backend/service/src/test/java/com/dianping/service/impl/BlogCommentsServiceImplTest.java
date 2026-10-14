@@ -11,6 +11,10 @@ import com.dianping.mapper.BlogCommentsMapper;
 import com.dianping.mapper.BlogMapper;
 import com.dianping.result.Result;
 import com.dianping.service.UserService;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.RedisCallback;
+import org.redisson.api.RedissonClient;
+
 import com.dianping.utils.UserHolder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +38,10 @@ class BlogCommentsServiceImplTest {
         ReflectionTestUtils.setField(service, "baseMapper", commentMapper);
         ReflectionTestUtils.setField(service, "blogMapper", blogMapper);
         ReflectionTestUtils.setField(service, "userService", userService);
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.executePipelined(any(RedisCallback.class))).thenReturn(List.of(0L));
+        ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
+        ReflectionTestUtils.setField(service, "redissonClient", mock(RedissonClient.class));
     }
 
     @AfterEach

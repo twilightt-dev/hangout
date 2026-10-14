@@ -1,13 +1,5 @@
 package com.dianping.comment;
 
-import com.dianping.application.comment.create.CreateCommentCommand;
-import com.dianping.application.comment.create.CreateCommentService;
-import com.dianping.application.comment.query.CommentPage;
-import com.dianping.application.comment.query.CommentView;
-import com.dianping.application.comment.query.QueryCommentsService;
-import com.dianping.application.comment.like.*;
-import com.dianping.application.comment.port.*;
-import com.dianping.domain.comment.*;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.dianping.config.MybatisConfig;
@@ -16,15 +8,28 @@ import com.dianping.config.SecurityConfig;
 import com.dianping.controller.BlogCommentsController;
 import com.dianping.dto.UserDTO;
 import com.dianping.exception.GlobalExceptionHandler;
-import com.dianping.facade.content.comment.CommentFacade;
 import com.dianping.filter.JwtAuthenticationFilter;
-import com.dianping.infrastructure.identity.comment.CurrentCommentAuthorAdapter;
-import com.dianping.infrastructure.persistence.adapter.comment.BlogCommentTargetAdapter;
-import com.dianping.infrastructure.persistence.adapter.comment.CommentAuthorDirectoryAdapter;
-import com.dianping.infrastructure.persistence.dataobject.comment.CommentDO;
-import com.dianping.infrastructure.persistence.mapper.comment.CommentMapper;
-import com.dianping.infrastructure.persistence.repository.comment.CommentRepositoryImpl;
 import com.dianping.mapper.BlogCommentsMapper;
+import com.dianping.mapper.BlogMapper;
+import com.dianping.mapper.UserMapper;
+import com.dianping.service.BlogCommentsService;
+import com.dianping.service.UserService;
+import com.dianping.service.impl.BlogCommentsServiceImpl;
+import org.redisson.api.RedissonClient;
+import org.redisson.api.RLock;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.SetOperations;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisSetCommands;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
+import com.dianping.entity.BlogComments;
+import com.dianping.VO.CommentVO;
+import com.dianping.dto.CreateCommentDTO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import static org.mockito.Mockito.*;
 import com.dianping.security.JwtProperties;
 import com.dianping.security.JwtUtils;
 import com.dianping.utils.UserHolder;
@@ -69,14 +74,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebAppConfiguration
 class CommentPilotIntegrationTest {
     @Autowired JdbcTemplate jdbc;
-    @Autowired CreateCommentService create;
-    @Autowired QueryCommentsService query;
-    @Autowired BlogCommentTargetAdapter blogs;
-    @Autowired CommentMapper comments;
-    @Autowired BlogCommentsMapper legacyComments;
+    @Autowired BlogCommentsService service;
+    @Autowired BlogCommentsMapper comments;
+    @Autowired BlogMapper blogs;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @Autowired WebApplicationContext context;
     @Autowired JwtUtils jwt;
-    @Autowired MemoryLikePorts likes;
+    @Autowired MemoryLikes likes;
     private MockMvc mvc;
 
     @BeforeEach
@@ -86,6 +90,7 @@ class CommentPilotIntegrationTest {
         user.setId(7L);
         UserHolder.saveUser(user);
         likes.unavailable = false;
+        likes.failWrites = false;
     }
 
     @AfterEach
@@ -95,7 +100,7 @@ class CommentPilotIntegrationTest {
     @Test
     void createsCommentAndTurnsNullCountIntoOneInTheRealTransaction() {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(101,NULL)");
-        Long id = assertDoesNotThrow(() -> create.create(new CreateCommentCommand(101L, "  值得去  ")));
+        Long id = assertDoesNotThrow(() -> createComment(101L, "  值得去  "));
         assertThat(id).isNotNull();
         assertThat(jdbc.queryForMap("SELECT user_id,blog_id,parent_id,answer_id,status,content FROM tb_blog_comments WHERE id=?", id))
                 .containsEntry("USER_ID", 7L).containsEntry("BLOG_ID", 101L)
@@ -107,23 +112,23 @@ class CommentPilotIntegrationTest {
     @Test
     void existingCountIsIncrementedRatherThanReplaced() {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(102,4)");
-        assertDoesNotThrow(() -> create.create(new CreateCommentCommand(102L, "第一条")));
-        assertDoesNotThrow(() -> create.create(new CreateCommentCommand(102L, "第二条")));
+        assertDoesNotThrow(() -> createComment(102L, "第一条"));
+        assertDoesNotThrow(() -> createComment(102L, "第二条"));
         assertThat(count(102)).isEqualTo(6);
         assertThat(commentCount(102)).isEqualTo(2);
     }
 
-    // 共用生产扫描配置，确认新旧映射读取同一张表并保留数据库默认值。
+    // 共用生产扫描配置，确认传统评论映射保留数据库默认值。
     @Test
-    void productionMapperScanKeepsBothMappingsOnTheExistingTable() {
+    void productionMapperScanUsesTheExistingCommentMapping() {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(111,0)");
-        Long id = create.create(new CreateCommentCommand(111L, "迁移后仍是同一条评论"));
-        CommentDO persisted = comments.selectById(id);
+        Long id = createComment(111L, "迁移后仍是同一条评论");
+        BlogComments persisted = comments.selectById(id);
         assertThat(persisted.getContent()).isEqualTo("迁移后仍是同一条评论");
         assertThat(persisted.getLiked()).isZero();
         assertThat(persisted.getCreateTime()).isNotNull();
         assertThat(persisted.getUpdateTime()).isNotNull();
-        assertThat(legacyComments.selectById(id).getContent()).isEqualTo(persisted.getContent());
+        assertThat(comments.selectById(id).getContent()).isEqualTo(persisted.getContent());
         assertThat(commentCount(111)).isEqualTo(1);
     }
 
@@ -131,7 +136,7 @@ class CommentPilotIntegrationTest {
     @Test
     void countSqlFailureRollsBackAlreadyInsertedComment() {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(103,0)");
-        assertThatThrownBy(() -> create.create(new CreateCommentCommand(103L, "必须回滚")))
+        assertThatThrownBy(() -> createComment(103L, "必须回滚"))
                 .isInstanceOf(DataAccessException.class);
         assertThat(commentCount(103)).isZero();
         assertThat(count(103)).isZero();
@@ -139,56 +144,56 @@ class CommentPilotIntegrationTest {
 
     @Test
     void counterAdapterReportsZeroRowsForMissingBlog() {
-        assertThat(blogs.incrementCount(9999L)).isFalse();
+        assertThat(blogs.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<com.dianping.entity.Blog>().eq("id", 9999L).setSql("comments = COALESCE(comments, 0) + 1")) > 0).isFalse();
     }
 
     @Test void commentLikeRequiresLoginAndTwoClicksToggleSelfLike() throws Exception {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(201,0)");
-        Long id = create.create(new CreateCommentCommand(201L, "自己的评论"));
+        Long id = createComment(201L, "自己的评论");
         UserHolder.removeUser();
         mvc.perform(post("/blog/201/comments/" + id + "/like")).andExpect(status().isUnauthorized());
         mvc.perform(post("/blog/201/comments/" + id + "/like").header("Authorization", bearer()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.liked").value(1)).andExpect(jsonPath("$.data.isLike").value(true));
+        assertThat(jdbc.queryForObject("SELECT liked FROM tb_blog_comments WHERE id=?", Long.class, id)).isEqualTo(1L);
         mvc.perform(post("/blog/201/comments/" + id + "/like").header("Authorization", bearer()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.liked").value(0)).andExpect(jsonPath("$.data.isLike").value(false));
+        assertThat(jdbc.queryForObject("SELECT liked FROM tb_blog_comments WHERE id=?", Long.class, id)).isZero();
     }
 
     @Test void wrongBlogAndHiddenCommentAndUnverifiedHistoryAreRejected() throws Exception {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(202,0)");
-        Long id = create.create(new CreateCommentCommand(202L, "评论"));
+        Long id = createComment(202L, "评论");
         UserHolder.removeUser();
         mvc.perform(post("/blog/999/comments/" + id + "/like").header("Authorization", bearer()))
                 .andExpect(jsonPath("$.code").value(0)).andExpect(jsonPath("$.msg").value("评论不属于该博客"));
         jdbc.update("UPDATE tb_blog_comments SET status=2 WHERE id=?", id);
         mvc.perform(post("/blog/202/comments/" + id + "/like").header("Authorization", bearer()))
                 .andExpect(jsonPath("$.msg").value("评论不允许点赞"));
-        jdbc.update("UPDATE tb_blog_comments SET status=0,like_epoch=0,liked=19 WHERE id=?", id);
+        jdbc.update("UPDATE tb_blog_comments SET status=0,liked=19 WHERE id=?", id);
         mvc.perform(post("/blog/202/comments/" + id + "/like").header("Authorization", bearer()))
                 .andExpect(jsonPath("$.msg").value("评论点赞数据待核对"));
         assertThat(jdbc.queryForObject("SELECT liked FROM tb_blog_comments WHERE id=?", Long.class, id)).isEqualTo(19L);
     }
 
-    @Test void realProjectionSqlIsIdempotentAndFencesVersionsAndRecoveryEpochs() {
+    @Test void realCountSqlHandlesNullAndPreventsUnderflowOverflowAndHiddenWrites() {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(203,0)");
-        Long id = create.create(new CreateCommentCommand(203L, "计数"));
-        jdbc.update("UPDATE tb_blog_comments SET like_initialized=TRUE WHERE id=?", id);
-        var projection = new com.dianping.infrastructure.persistence.adapter.comment.CommentLikeCountSyncAdapter(null, comments);
-        var newest = new com.dianping.application.comment.like.sync.CommentLikeCountSnapshot(id, 1, 4, 3);
-        assertThat(projection.writeCount(newest)).isTrue();
-        assertThat(projection.writeCount(newest)).isTrue();
-        assertThat(projection.writeCount(new com.dianping.application.comment.like.sync.CommentLikeCountSnapshot(id, 1, 2, 9))).isTrue();
-        assertThat(comments.selectById(id).getLiked()).isEqualTo(3);
-        jdbc.update("UPDATE tb_blog_comments SET like_epoch=2,like_version=0 WHERE id=?", id);
-        assertThat(projection.writeCount(newest)).isFalse();
-        assertThat(projection.writeCount(new com.dianping.application.comment.like.sync.CommentLikeCountSnapshot(id, 2, 1, 2))).isTrue();
-        assertThat(comments.selectById(id).getLiked()).isEqualTo(2);
-        jdbc.update("UPDATE tb_blog_comments SET like_epoch=0 WHERE id=?", id);
-        assertThat(projection.writeCount(newest)).isFalse();
+        Long id = createComment(203L, "计数");
+        jdbc.update("UPDATE tb_blog_comments SET liked=NULL WHERE id=?", id);
+        assertThat(comments.incrementLiked(id, 203L)).isEqualTo(1);
+        assertThat(comments.selectById(id).getLiked()).isEqualTo(1L);
+        assertThat(comments.decrementLiked(id, 203L)).isEqualTo(1);
+        assertThat(comments.decrementLiked(id, 203L)).isZero();
+        assertThat(comments.incrementLiked(id, 999L)).isZero();
+        jdbc.update("UPDATE tb_blog_comments SET status=2 WHERE id=?", id);
+        assertThat(comments.incrementLiked(id, 203L)).isZero();
+        jdbc.update("UPDATE tb_blog_comments SET status=0,liked=4294967295 WHERE id=?", id);
+        assertThat(comments.incrementLiked(id, 203L)).isZero();
+        assertThat(comments.selectById(id).getLiked()).isEqualTo(4294967295L);
     }
 
     @Test void likeFailureReturns503ButCommentListRetainsCountAndUnknownStatus() throws Exception {
         jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(204,0)");
-        Long id = create.create(new CreateCommentCommand(204L, "仍可浏览"));
+        Long id = createComment(204L, "仍可浏览");
         jdbc.update("UPDATE tb_blog_comments SET liked=6 WHERE id=?", id);
         likes.unavailable = true; UserHolder.removeUser();
         mvc.perform(post("/blog/204/comments/" + id + "/like").header("Authorization", bearer()))
@@ -201,6 +206,36 @@ class CommentPilotIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.records[0].isLike").value(false));
     }
 
+    @Test void failedRedisWriteLeavesCountForManualCheckingWithoutReplaying() throws Exception {
+        jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(205,0)");
+        Long id = createComment(205L, "部分失败");
+        likes.failWrites = true;
+        UserHolder.removeUser();
+        mvc.perform(post("/blog/205/comments/" + id + "/like").header("Authorization", bearer()))
+                .andExpect(status().isServiceUnavailable());
+        // 明确接受部分成功：数据库只加一次，不自动补偿、不重试切换。
+        assertThat(jdbc.queryForObject("SELECT liked FROM tb_blog_comments WHERE id=?", Long.class, id)).isEqualTo(1L);
+        mvc.perform(get("/blog/205/comments").header("Authorization", bearer()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.records[0].liked").value(1))
+                .andExpect(jsonPath("$.data.records[0].isLike").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.records[0].likeAvailable").value(false));
+    }
+
+    @Test void historicalMissingRelationsDisableOnlyThatComment() {
+        jdbc.update("INSERT INTO tb_blog(id,comments) VALUES(206,0)");
+        Long historical = createComment(206L, "待核对评论");
+        Long healthy = createComment(206L, "正常评论");
+        jdbc.update("UPDATE tb_blog_comments SET liked=19 WHERE id=?", historical);
+        var page = service.queryComments(206L, 1).getData();
+        var normal = page.getRecords().stream().filter(vo -> vo.getId().equals(healthy)).findFirst().orElseThrow();
+        var paused = page.getRecords().stream().filter(vo -> vo.getId().equals(historical)).findFirst().orElseThrow();
+        assertThat(normal.isLikeAvailable()).isTrue();
+        assertThat(normal.getIsLike()).isFalse();
+        assertThat(paused.isLikeAvailable()).isFalse();
+        assertThat(paused.getIsLike()).isNull();
+        assertThat(paused.getLiked()).isEqualTo(19);
+    }
+
     // 手工预期：12 个正常一级评论；最新时间 id=10 优先，同时间 id 降序。
     @Test
     void realSqlFiltersAndSortsBothKeysAndPaginatesAtTen() {
@@ -211,15 +246,15 @@ class CommentPilotIntegrationTest {
         jdbc.update("UPDATE tb_blog_comments SET create_time='2026-10-12 11:00:00',status=NULL WHERE id=1010");
         jdbc.update("UPDATE tb_blog_comments SET user_id=999 WHERE id=1012");
         jdbc.update("INSERT INTO tb_blog_comments(id,blog_id,parent_id,status,content,create_time) VALUES(1100,104,1,0,'回复','2026-10-12 12:00:00'),(1101,104,0,1,'举报','2026-10-12 12:00:00'),(1102,104,0,2,'隐藏','2026-10-12 12:00:00'),(1103,105,0,0,'另一博客','2026-10-12 12:00:00'),(1104,105,0,NULL,'另一博客旧状态','2026-10-12 12:00:00')");
-        CommentPage<CommentView> first = query.query(104L, 1);
-        assertThat(first.total()).isEqualTo(12);
-        assertThat(first.size()).isEqualTo(10);
-        assertThat(first.records()).extracting(CommentView::id)
+        Page<CommentVO> first = queryPage(104L, 1);
+        assertThat(first.getTotal()).isEqualTo(12);
+        assertThat(first.getSize()).isEqualTo(10);
+        assertThat(first.getRecords()).extracting(CommentVO::getId)
                 .containsExactly(1010L,1012L,1011L,1009L,1008L,1007L,1006L,1005L,1004L,1003L);
-        assertThat(first.records().get(0).userName()).isEqualTo("小林");
-        assertThat(first.records().get(1).userName()).isNull();
-        assertThat(query.query(104L, 2).records()).extracting(CommentView::id).containsExactly(1002L,1001L);
-        assertThat(query.query(104L, 3).records()).isEmpty();
+        assertThat(first.getRecords().get(0).getUserName()).isEqualTo("小林");
+        assertThat(first.getRecords().get(1).getUserName()).isNull();
+        assertThat(queryPage(104L, 2).getRecords()).extracting(CommentVO::getId).containsExactly(1002L,1001L);
+        assertThat(queryPage(104L, 3).getRecords()).isEmpty();
     }
 
     @Test
@@ -307,6 +342,14 @@ class CommentPilotIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.msg").value("博客不存在"));
     }
 
+    private Long createComment(Long blogId, String content) {
+        CreateCommentDTO request = new CreateCommentDTO(); request.setContent(content);
+        var result = service.createComment(blogId, request);
+        assertThat(result.getCode()).isEqualTo(1);
+        return result.getData();
+    }
+    private Page<CommentVO> queryPage(Long blogId, Integer page) { return service.queryComments(blogId, page).getData(); }
+
     private int count(long blogId) { return jdbc.queryForObject("SELECT comments FROM tb_blog WHERE id=?", Integer.class, blogId); }
     private int commentCount(long blogId) { return jdbc.queryForObject("SELECT COUNT(*) FROM tb_blog_comments WHERE blog_id=?", Integer.class, blogId); }
     private String bearer() { return "Bearer " + jwt.generateAccessToken("7"); }
@@ -315,9 +358,8 @@ class CommentPilotIntegrationTest {
     @Configuration
     @EnableWebMvc
     @EnableTransactionManagement
-    @Import({MybatisConfig.class, MapperConfiguration.class, CreateCommentService.class, QueryCommentsService.class, ToggleCommentLikeService.class,
-            CommentRepositoryImpl.class, BlogCommentTargetAdapter.class, CommentAuthorDirectoryAdapter.class,
-            CurrentCommentAuthorAdapter.class, CommentFacade.class, BlogCommentsController.class,
+    @Import({MybatisConfig.class, MapperConfiguration.class, BlogCommentsServiceImpl.class,
+            BlogCommentsController.class,
             GlobalExceptionHandler.class, SecurityConfig.class, JwtAuthenticationFilter.class})
     static class Config implements WebMvcConfigurer {
         @Bean DataSource dataSource() {
@@ -326,7 +368,7 @@ class CommentPilotIntegrationTest {
         @Bean JdbcTemplate jdbcTemplate(DataSource ds) {
             JdbcTemplate jdbc = new JdbcTemplate(ds);
             jdbc.execute("CREATE TABLE tb_blog(id BIGINT AUTO_INCREMENT PRIMARY KEY,shop_id BIGINT,user_id BIGINT,title VARCHAR(255),images VARCHAR(255),content TEXT,liked INT,comments INT,create_time TIMESTAMP,update_time TIMESTAMP, CONSTRAINT reject_count CHECK(id<>103 OR comments<1))");
-            jdbc.execute("CREATE TABLE tb_blog_comments(id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id BIGINT,blog_id BIGINT,parent_id BIGINT,answer_id BIGINT,content VARCHAR(255),liked BIGINT DEFAULT 0,like_epoch BIGINT DEFAULT 0,like_version BIGINT DEFAULT 0,like_initialized BOOLEAN DEFAULT FALSE,status INT,create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+            jdbc.execute("CREATE TABLE tb_blog_comments(id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id BIGINT,blog_id BIGINT,parent_id BIGINT,answer_id BIGINT,content VARCHAR(255),liked BIGINT DEFAULT 0,status INT,create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
             jdbc.execute("CREATE TABLE tb_user(id BIGINT PRIMARY KEY,phone VARCHAR(20),password VARCHAR(255),nick_name VARCHAR(255),icon VARCHAR(255),create_time TIMESTAMP,update_time TIMESTAMP)");
             jdbc.update("INSERT INTO tb_user(id,nick_name,icon) VALUES(7,'小林','/avatar.png')");
             return jdbc;
@@ -342,7 +384,20 @@ class CommentPilotIntegrationTest {
             return new SqlSessionTemplate(factory.getObject());
         }
         @Bean DataSourceTransactionManager transactionManager(DataSource ds) { return new DataSourceTransactionManager(ds); }
-        @Bean MemoryLikePorts likePorts(JdbcTemplate jdbc) { return new MemoryLikePorts(jdbc); }
+        @Bean MemoryLikes memoryLikes() { return new MemoryLikes(); }
+        @Bean StringRedisTemplate redis(MemoryLikes memory) { return memory.template(); }
+        @Bean RedissonClient redisson() throws InterruptedException {
+            RedissonClient client = mock(RedissonClient.class);
+            RLock lock = mock(RLock.class);
+            when(client.getLock(anyString())).thenReturn(lock);
+            when(lock.tryLock(1, TimeUnit.SECONDS)).thenReturn(true);
+            return client;
+        }
+        @Bean UserService users(UserMapper mapper) {
+            UserService users = mock(UserService.class);
+            when(users.listByIds(anyCollection())).thenAnswer(call -> mapper.selectByIds(call.getArgument(0)));
+            return users;
+        }
         @Bean JwtUtils jwtUtils() {
             JwtProperties properties = new JwtProperties();
             // 固定内容仅供隔离测试签名，不能使用生产密钥。
@@ -355,31 +410,58 @@ class CommentPilotIntegrationTest {
         }
     }
 
-    /** HTTP 测试用关系能力；真实 Lua 另由隔离 Redis 测试验证。 */
-    static class MemoryLikePorts implements CommentLikeRepository, CommentLikeReadPort {
-        private final JdbcTemplate jdbc;
-        private final java.util.Map<CommentLikeId, Boolean> relations = new java.util.HashMap<>();
+    /** 仅替代 Redis 网络边界；数据库、事务、Service 和 HTTP 安全使用真实实现。 */
+    static class MemoryLikes {
+        private final java.util.Map<String, java.util.Set<String>> relations = new java.util.HashMap<>();
         boolean unavailable;
-        MemoryLikePorts(JdbcTemplate jdbc) { this.jdbc = jdbc; }
-        public CommentLike findState(CommentLikeId id, long epoch, boolean initialize) {
-            if (unavailable) throw new CommentLikeUnavailableException();
-            return CommentLike.restore(id, relations.getOrDefault(id, false));
+        boolean failWrites;
+        void check() { if (unavailable) throw new RedisConnectionFailureException("隔离测试故障"); }
+        java.util.Set<String> members(String key) {
+            check();
+            return relations.computeIfAbsent(key, ignored -> new java.util.HashSet<>());
         }
-        public CommentLikeApplyResult tryApply(CommentLikeChange change, long epoch) {
-            if (unavailable) throw new CommentLikeUnavailableException();
-            boolean current = relations.getOrDefault(change.id(), false);
-            if (current != change.expectedLiked()) return new CommentLikeApplyResult(false, current, 0);
-            relations.put(change.id(), change.targetLiked());
-            long count = relations.entrySet().stream().filter(e -> e.getKey().commentId().equals(change.id().commentId()) && e.getValue()).count();
-            return new CommentLikeApplyResult(true, change.targetLiked(), count);
-        }
-        public java.util.Map<Long, CommentLikeStatus> findStates(List<Long> ids, Long userId) {
-            if (unavailable) throw new CommentLikeUnavailableException();
-            java.util.Map<Long, CommentLikeStatus> states = new java.util.HashMap<>();
-            ids.forEach(id -> states.put(id, jdbc.queryForObject("SELECT like_epoch FROM tb_blog_comments WHERE id=?", Long.class, id) > 0
-                    ? new CommentLikeStatus(userId != null && relations.getOrDefault(new CommentLikeId(id, userId), false), true)
-                    : CommentLikeStatus.unavailable(userId)));
-            return states;
+        @SuppressWarnings("unchecked")
+        StringRedisTemplate template() {
+            StringRedisTemplate redis = mock(StringRedisTemplate.class);
+            SetOperations<String, String> sets = mock(SetOperations.class, call -> {
+                Object[] args = call.getRawArguments();
+                String key = args.length == 0 ? null : (String) args[0];
+                return switch (call.getMethod().getName()) {
+                    case "size" -> (long) members(key).size();
+                    case "isMember" -> members(key).contains(args[1]);
+                    case "add", "remove" -> {
+                        if (failWrites) throw new RedisConnectionFailureException("隔离测试写入故障");
+                        long changed = 0;
+                        for (Object member : (Object[]) args[1]) {
+                            boolean applied = call.getMethod().getName().equals("add")
+                                    ? members(key).add((String) member) : members(key).remove(member);
+                            if (applied) changed++;
+                        }
+                        yield changed;
+                    }
+                    default -> RETURNS_DEFAULTS.answer(call);
+                };
+            });
+            when(redis.opsForSet()).thenReturn(sets);
+            when(redis.executePipelined(any(RedisCallback.class))).thenAnswer(call -> {
+                check();
+                java.util.List<Object> results = new java.util.ArrayList<>();
+                RedisConnection connection = mock(RedisConnection.class);
+                RedisSetCommands commands = mock(RedisSetCommands.class);
+                when(connection.setCommands()).thenReturn(commands);
+                when(commands.sCard(any())).thenAnswer(command -> {
+                    Long value = (long) members(new String(command.getArgument(0), StandardCharsets.UTF_8)).size();
+                    results.add(value); return value;
+                });
+                when(commands.sIsMember(any(), any())).thenAnswer(command -> {
+                    Boolean value = members(new String(command.getArgument(0), StandardCharsets.UTF_8))
+                            .contains(new String(command.getArgument(1), StandardCharsets.UTF_8));
+                    results.add(value); return value;
+                });
+                ((RedisCallback<?>) call.getArgument(0)).doInRedis(connection);
+                return results;
+            });
+            return redis;
         }
     }
 }

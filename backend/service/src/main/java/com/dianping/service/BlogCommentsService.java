@@ -21,4 +21,9 @@ public interface BlogCommentsService extends IService<BlogComments> {
 
     Result<Page<CommentVO>> queryComments(Long blogId, Integer current);
 
+    Result<LikeResult> toggleCommentLike(Long blogId, Long commentId);
+
+    /** 点赞接口响应；数量来自数据库，状态来自本次切换。 */
+    record LikeResult(long liked, boolean isLike) {}
+
 }

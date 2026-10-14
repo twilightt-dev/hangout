@@ -13,16 +13,16 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(com.dianping.application.comment.like.CommentLikeUnavailableException.class)
-    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-    public Result<Void> handleCommentLikeUnavailable(com.dianping.application.comment.like.CommentLikeUnavailableException exception) {
-        log.warn("评论点赞状态暂时不可用", exception);
-        return Result.error(exception.getMessage());
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Result<Void>> handleResponseStatusException(ResponseStatusException exception) {
+        if (exception.getStatusCode().is5xxServerError()) log.warn("服务暂时不可用", exception);
+        return ResponseEntity.status(exception.getStatusCode()).body(Result.error(exception.getReason()));
     }
 
     @ExceptionHandler(VisitStatsException.class)

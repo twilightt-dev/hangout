@@ -11,6 +11,8 @@ docs/adr/*
 !docs/adr/0007-博客与店铺访问统计采用展示上报和近似访客计数.md
 !docs/adr/0008-DDD升级采用九模块渐进迁移并保持兼容.md
 !docs/adr/0009-评论点赞关系使用Redis计数保存在MySQL.md
+!docs/adr/0010-评论回归传统Service并保留九模块与点赞.md
+!docs/adr/0011-评论点赞收拢到Service并取消自动同步.md
 !docs/superpowers/
 docs/superpowers/*
 !docs/superpowers/plans/
@@ -20,6 +22,7 @@ docs/superpowers/plans/*
 !docs/design/2026-10-14-评论点赞领域模型设计.md
 !docs/design/评论点赞部署与恢复.md
 !docs/superpowers/plans/2026-10-14-comment-like.md
+!docs/superpowers/plans/2026-10-14-comment-like-simple.md
 lessions
 
 # Vue / Node
