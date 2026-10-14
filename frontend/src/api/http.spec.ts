@@ -80,6 +80,17 @@ describe('http client', () => {
     await expect(requests).resolves.toEqual(['/one', '/two'])
   })
 
+  it('评论切换遇到401也不自动重放POST', async () => {
+    const refresh = vi.fn(); const client = createHttpClient(undefined, refresh); let attempts = 0
+    client.defaults.adapter = async config => {
+      attempts++
+      throw new axios.AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, undefined, { status: 401, statusText: 'Unauthorized', headers: {}, config, data: {} })
+    }
+    sessionStorage.setItem('token', '旧token'); sessionStorage.setItem('refreshToken', '刷新token')
+    await expect(client.post('/blog/8/comments/21/like', undefined, { skipAuthReplay: true })).rejects.toMatchObject({ code: 401 })
+    expect(attempts).toBe(1); expect(refresh).not.toHaveBeenCalled()
+  })
+
   it('刷新失败时清理全部认证数据且不重复重试', async () => {
     const unauthorized = vi.fn()
     const refresh = vi.fn().mockRejectedValue(new Error('refresh expired'))
