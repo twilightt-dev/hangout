@@ -3,16 +3,18 @@ import { nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BlogDetailView from './BlogDetailView.vue'
 
-const { getBlog, getBlogLikes, likeBlog, getShop, getFollowStatus, setFollow, getCurrentUser, sendVisit, push, authState } = vi.hoisted(() => ({
+const { getBlog, getBlogLikes, getBlogComments, createBlogComment, toggleBlogCommentLike, likeBlog, getShop, getFollowStatus, setFollow, getCurrentUser, sendVisit, push, authState } = vi.hoisted(() => ({
+  getBlogComments: vi.fn(), createBlogComment: vi.fn(), toggleBlogCommentLike: vi.fn(),
   getBlog: vi.fn(), getBlogLikes: vi.fn(), likeBlog: vi.fn(), getShop: vi.fn(), getFollowStatus: vi.fn(), setFollow: vi.fn(), getCurrentUser: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), authState: { authenticated: false, user: null as null | { id: number } },
 }))
 const route = reactive({ params: { id: '8' as string | undefined }, fullPath: '/blogs/8' })
-vi.mock('@/api/blog', () => ({ getBlog, getBlogLikes, likeBlog }))
+const liveAuth = reactive(authState)
+vi.mock('@/api/blog', () => ({ getBlog, getBlogLikes, getBlogComments, createBlogComment, toggleBlogCommentLike, likeBlog }))
 vi.mock('@/api/shop', () => ({ getShop }))
 vi.mock('@/api/follow', () => ({ getFollowStatus, setFollow }))
 vi.mock('@/api/user', () => ({ getCurrentUser }))
 vi.mock('@/api/traffic', async (importOriginal) => ({ ...await importOriginal<typeof import('@/api/traffic')>(), sendVisit }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ get isAuthenticated() { return authState.authenticated }, get user() { return authState.user } }) }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ get isAuthenticated() { return liveAuth.authenticated }, get user() { return liveAuth.user } }) }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), success: vi.fn() } }))
 
@@ -25,6 +27,91 @@ describe('BlogDetailView', () => {
     route.params.id = '8'; route.fullPath = '/blogs/8'; authState.authenticated = false; authState.user = null; push.mockReset()
     getBlog.mockReset().mockResolvedValue({ id: 8, userId: 3, shopId: 5, name: '小林', title: '午后咖啡', content: '<img src=x onerror="alert(1)">\n保留换行', images: 'https://img.example/a.jpg,https://img.example/b.jpg', liked: 3 })
     getBlogLikes.mockReset().mockResolvedValue([]); getShop.mockReset().mockResolvedValue({ id: 5, name: '巷口咖啡' }); likeBlog.mockReset().mockResolvedValue(undefined); getFollowStatus.mockReset().mockResolvedValue(false); setFollow.mockReset().mockResolvedValue(undefined); getCurrentUser.mockReset().mockResolvedValue({ id: 1 })
+    getBlogComments.mockReset().mockResolvedValue({ records: [{ id: 21, blogId: 8, content: '评论正文', liked: 0, isLike: false, likeAvailable: true }], current: 1, pages: 1, total: 1 })
+    createBlogComment.mockReset().mockResolvedValue(22)
+    toggleBlogCommentLike.mockReset().mockResolvedValue({ liked: 1, isLike: true })
+  })
+
+  it('评论两次点击切换颜色与数量，并且不立即读取滞后计数', async () => {
+    authState.authenticated = true; authState.user = { id: 1 }
+    const wrapper = mountView(); await flushPromises()
+    const button = wrapper.get('[data-test="comment-like-21"]')
+    await button.trigger('click'); await flushPromises()
+    expect(button.attributes('aria-pressed')).toBe('true'); expect(button.text()).toContain('1')
+    expect(getBlogComments).toHaveBeenCalledTimes(1)
+    toggleBlogCommentLike.mockResolvedValueOnce({ liked: 0, isLike: false })
+    await button.trigger('click'); await flushPromises()
+    expect(button.attributes('aria-pressed')).toBe('false'); expect(button.text()).toContain('0')
+    expect(toggleBlogCommentLike).toHaveBeenCalledTimes(2)
+  })
+
+  it('游客评论点赞跳转登录', async () => {
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.get('[data-test="comment-like-21"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/blogs/8' } })
+    expect(toggleBlogCommentLike).not.toHaveBeenCalled()
+  })
+
+  it('评论点赞防连点，失败只重新读取状态而不重发切换', async () => {
+    authState.authenticated = true; authState.user = { id: 1 }
+    let reject!: (reason: Error) => void
+    toggleBlogCommentLike.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    const wrapper = mountView(); await flushPromises()
+    const button = wrapper.get('[data-test="comment-like-21"]')
+    await button.trigger('click'); await button.trigger('click')
+    expect(toggleBlogCommentLike).toHaveBeenCalledTimes(1)
+    getBlogComments.mockResolvedValueOnce({ records: [{ id: 21, liked: 1, isLike: true, likeAvailable: true }], current: 1, pages: 1 })
+    reject(new Error('网络结果未知')); await flushPromises()
+    expect(toggleBlogCommentLike).toHaveBeenCalledTimes(1); expect(getBlogComments).toHaveBeenCalledTimes(2)
+    expect(button.attributes('aria-pressed')).toBe('true'); expect(button.attributes('disabled')).toBeUndefined()
+  })
+
+  it('未知状态禁用按钮并允许读取重试', async () => {
+    authState.authenticated = true; authState.user = { id: 1 }
+    getBlogComments.mockResolvedValueOnce({ records: [{ id: 21, liked: 5, isLike: null, likeAvailable: false }], current: 1, pages: 1 })
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.get('[data-test="comment-like-21"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('5')
+    await wrapper.get('[data-test="comment-like-retry-21"]').trigger('click'); await flushPromises()
+    expect(wrapper.get('[data-test="comment-like-21"]').attributes('disabled')).toBeUndefined()
+    expect(toggleBlogCommentLike).not.toHaveBeenCalled()
+  })
+
+  it('离开详情后到达的评论点赞不会覆盖新页面', async () => {
+    authState.authenticated = true; authState.user = { id: 1 }
+    let finish!: (result: { liked: number; isLike: boolean }) => void
+    toggleBlogCommentLike.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.get('[data-test="comment-like-21"]').trigger('click')
+    route.params.id = '9'; route.fullPath = '/blogs/9'; await nextTick(); await flushPromises()
+    finish({ liked: 99, isLike: true }); await flushPromises()
+    expect(wrapper.get('[data-test="comment-like-21"]').text()).not.toContain('99')
+  })
+
+  it('身份变化后旧点赞响应不写入新用户状态', async () => {
+    liveAuth.authenticated = true; liveAuth.user = { id: 1 }
+    let finish!: (result: { liked: number; isLike: boolean }) => void
+    toggleBlogCommentLike.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.get('[data-test="comment-like-21"]').trigger('click')
+    liveAuth.user = { id: 2 }; await nextTick()
+    finish({ liked: 99, isLike: true }); await flushPromises()
+    expect(wrapper.get('[data-test="comment-like-21"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test="comment-like-21"]').text()).not.toContain('99')
+    expect(wrapper.find('[data-test="comment-like-retry-21"]').exists()).toBe(true)
+  })
+
+  it('成功操作不被较早发出的分页读取覆盖', async () => {
+    liveAuth.authenticated = true; liveAuth.user = { id: 1 }
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.get('#comment-content').setValue('新内容')
+    let finish!: (result: unknown) => void
+    getBlogComments.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    await wrapper.get('.comment-form').trigger('submit'); await flushPromises()
+    await wrapper.get('[data-test="comment-like-21"]').trigger('click'); await flushPromises()
+    finish({ records: [{ id: 21, liked: 0, isLike: false, likeAvailable: true }], current: 1, pages: 1, total: 1 }); await flushPromises()
+    expect(wrapper.get('[data-test="comment-like-21"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-test="comment-like-21"]').text()).toContain('1')
   })
 
   it('成功展示后上报博客 PV，关联店铺查询和点赞刷新不增加访问', async () => {

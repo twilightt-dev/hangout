@@ -12,3 +12,6 @@ export const getBlogComments = (blogId: number, current = 1) =>
   dataOf<PageResult<Comment>>(http.get<PageResult<Comment>>(`/blog/${blogId}/comments`, { params: { current } }))
 export const createBlogComment = (blogId: number, content: string) =>
   dataOf<number>(http.post<number>(`/blog/${blogId}/comments`, { content }))
+/** 切换请求不自动重放，结果未知时由页面重新读取。 */
+export const toggleBlogCommentLike = (blogId: number, commentId: number) =>
+  dataOf<{ liked: number; isLike: boolean }>(http.post(`/blog/${blogId}/comments/${commentId}/like`, undefined, { skipAuthReplay: true }))

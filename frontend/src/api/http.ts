@@ -1,6 +1,10 @@
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import type { ApiResult, TokenVO } from '@/types/api'
 
+declare module 'axios' {
+  interface AxiosRequestConfig { skipAuthReplay?: boolean }
+}
+
 export class ApiError extends Error {
   code?: number
   constructor(message: string, code?: number) { super(message); this.name = 'ApiError'; this.code = code }
@@ -79,7 +83,7 @@ export function createHttpClient(
         const request = error.config as RetryableRequestConfig | undefined
         const refreshToken = sessionStorage.getItem('refreshToken')
 
-        if (request && !request._retry && refreshToken) {
+        if (request && !request.skipAuthReplay && !request._retry && refreshToken) {
           request._retry = true
           let currentRefresh: Promise<TokenVO> | null = null
           try {
