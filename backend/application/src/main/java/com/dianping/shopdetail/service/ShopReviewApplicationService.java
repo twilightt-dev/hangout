@@ -1,5 +1,6 @@
 package com.dianping.shopdetail.service;
 
+import com.dianping.shopdetail.enums.ReviewTag;
 import com.dianping.shopdetail.exception.DuplicateReviewSubmissionException;
 import com.dianping.shopdetail.exception.ShopReviewException;
 import com.dianping.shopdetail.model.*;
@@ -12,6 +13,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.util.Arrays;
 import java.util.List;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /** 用例编排与事务边界；不读取 HTTP 或线程本地身份。 */
 @Service
@@ -44,7 +47,9 @@ public class ShopReviewApplicationService {
                 var existing = repository.findSubmission(userId, review.requestId());
                 if (existing.isPresent()) return replay(existing.get(), review);
                 Long id = repository.insert(review);
-                repository.updateStatistics(shopId, repository.statistics(shopId));
+                long total = repository.countByShopId(shopId);
+                int score = storedScore(total, repository.sumOverallScoreByShopId(shopId));
+                repository.updateStatistics(shopId, score, Math.toIntExact(total));
                 return id;
             });
         } catch (DuplicateReviewSubmissionException error) {
@@ -61,14 +66,23 @@ public class ShopReviewApplicationService {
     public ShopReviewPageResult page(ShopReviewPageRequest request) {
         return read.execute(status -> {
             if (!repository.shopExists(request.shopId())) throw new ShopReviewException(404, "店铺不存在");
-            var statistics = repository.statistics(request.shopId());
-            var reviews = request.offset() >= statistics.total() ? List.<ShopReview>of()
+            long total = repository.countByShopId(request.shopId());
+            int score = storedScore(total, repository.sumOverallScoreByShopId(request.shopId()));
+            var reviews = request.offset() >= total ? List.<ShopReview>of()
                     : repository.page(request.shopId(), request.offset(), ShopReviewPageRequest.SIZE);
-            var authors = repository.authors(reviews.stream().map(ShopReview::userId).distinct().toList());
-            var items = reviews.stream().map(review -> ShopReviewItem.from(review, authors.get(review.userId()))).toList();
-            return new ShopReviewPageResult(items, statistics.total(), request.current(), ShopReviewPageRequest.SIZE,
-                    (statistics.total() + ShopReviewPageRequest.SIZE - 1) / ShopReviewPageRequest.SIZE, statistics.averageScore());
+            var items = reviews.stream().map(ShopReviewItem::from).toList();
+            return new ShopReviewPageResult(items, total, request.current(), ShopReviewPageRequest.SIZE,
+                    (total + ShopReviewPageRequest.SIZE - 1) / ShopReviewPageRequest.SIZE,
+                    total == 0 ? null : BigDecimal.valueOf(score, 1));
         });
+    }
+
+    /** 从评分总和计算均分，保留内部十分之一分的精度，不使用历史均分反推。 */
+    private static int storedScore(long total, long scoreSum) {
+        if (total < 0 || total > Integer.MAX_VALUE || scoreSum < 0)
+            throw new IllegalStateException("评价统计超出支持范围");
+        return total == 0 ? 0 : BigDecimal.valueOf(scoreSum)
+                .divide(BigDecimal.valueOf(total), 0, RoundingMode.HALF_UP).intValueExact();
     }
     public List<ShopReviewTagOption> tags() {
         return Arrays.stream(ReviewTag.values()).map(tag -> new ShopReviewTagOption(tag.name(), tag.displayName())).toList();

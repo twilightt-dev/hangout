@@ -39,8 +39,43 @@ class ShopReviewIntegrationTest {
         assertThat(page.records().getFirst().id()).isEqualTo(id);
         assertThat(page.records().getFirst().tasteScore()).isEqualByComparingTo("3");
         assertThat(page.records().getFirst().content()).isEqualTo("很好");
+        assertThat(page.records().getFirst().userName()).isEqualTo("小林");
+        assertThat(page.records().getFirst().userIcon()).isEqualTo("/avatar.png");
         assertThat(jdbc.queryForMap("SELECT score,comments FROM tb_shop WHERE id=101"))
                 .containsEntry("SCORE", 45).containsEntry("COMMENTS", 1);
+    }
+
+    @Test void readsCurrentAuthorAndKeepsReviewsWhenAuthorIsMissing() {
+        jdbc.update("INSERT INTO tb_shop(id,score,comments) VALUES(102,0,0)");
+        jdbc.update("INSERT INTO tb_user(id,nick_name,icon) VALUES(8,'旧昵称','/old.png')");
+        service.publish(102L, 8L, request(UUID.randomUUID().toString(), "当前资料", "4"));
+        jdbc.update("UPDATE tb_user SET nick_name='新昵称',icon='/new.png' WHERE id=8");
+        service.publish(102L, 999L, request(UUID.randomUUID().toString(), "作者资料缺失", "4.5"));
+
+        var page = service.page(new ShopReviewPageRequest(102L, 1L));
+        assertThat(page.total()).isEqualTo(2);
+        var authorReview = page.records().stream().filter(item -> item.userId().equals(8L)).findFirst().orElseThrow();
+        assertThat(authorReview.userName()).isEqualTo("新昵称");
+        assertThat(authorReview.userIcon()).isEqualTo("/new.png");
+        var missingReview = page.records().stream().filter(item -> item.userId().equals(999L)).findFirst().orElseThrow();
+        assertThat(missingReview.userName()).isEqualTo("用户资料暂缺");
+        assertThat(missingReview.userIcon()).isNull();
+    }
+
+    @Test void calculatesRoundedSummaryAndPreservesItOnAnOutOfRangePage() {
+        jdbc.update("INSERT INTO tb_shop(id,score,comments) VALUES(104,0,0)");
+        var empty = service.page(new ShopReviewPageRequest(104L, 1L));
+        assertThat(empty.averageScore()).isNull();
+        assertThat(empty.total()).isZero();
+        service.publish(104L, 7L, request(UUID.randomUUID().toString(), "第一条", "4"));
+        service.publish(104L, 7L, request(UUID.randomUUID().toString(), "第二条", "4.5"));
+
+        var page = service.page(new ShopReviewPageRequest(104L, 2L));
+        assertThat(page.records()).isEmpty();
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.averageScore()).isEqualByComparingTo("4.3");
+        assertThat(jdbc.queryForMap("SELECT score,comments FROM tb_shop WHERE id=104"))
+                .containsEntry("SCORE", 43).containsEntry("COMMENTS", 2);
     }
 
     static PublishShopReviewRequest request(String id, String content, String score) {

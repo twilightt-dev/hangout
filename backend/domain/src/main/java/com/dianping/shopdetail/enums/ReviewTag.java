@@ -1,4 +1,4 @@
-package com.dianping.shopdetail.model;
+package com.dianping.shopdetail.enums;
 
 import java.util.Arrays;
 

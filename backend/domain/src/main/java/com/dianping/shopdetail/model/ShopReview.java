@@ -1,5 +1,6 @@
 package com.dianping.shopdetail.model;
 
+import com.dianping.shopdetail.enums.ReviewTag;
 import com.dianping.shopdetail.exception.ShopReviewException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,7 +10,10 @@ import java.util.UUID;
 /** 一条评价事实；评分以十分之一分存储，标签和提交内容规范化后不可变。 */
 public record ShopReview(Long id, Long shopId, Long userId, String requestId,
                          int overallScore, int tasteScore, int environmentScore, int serviceScore,
-                         String content, List<String> tags, LocalDateTime createTime) {
+                         String content, List<String> tags, LocalDateTime createTime,
+                         String userName, String userIcon) {
+
+
     public ShopReview {
         if (shopId == null || shopId <= 0 || userId == null || userId <= 0) invalid("店铺和作者标识必须为正数");
         try {
@@ -32,7 +36,7 @@ public record ShopReview(Long id, Long shopId, Long userId, String requestId,
                                     int tasteScore, int environmentScore, int serviceScore,
                                     String content, List<String> tags, LocalDateTime now) {
         return new ShopReview(null, shopId, userId, requestId, overallScore, tasteScore,
-                environmentScore, serviceScore, content, tags, now);
+                environmentScore, serviceScore, content, tags, now, null, null);
     }
 
     public boolean sameSubmission(ShopReview other) {
