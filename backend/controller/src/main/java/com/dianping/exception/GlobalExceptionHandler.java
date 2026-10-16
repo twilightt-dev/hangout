@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import com.dianping.shopdetail.exception.ShopReviewException;
 
 @Slf4j
 @RestControllerAdvice
@@ -27,6 +28,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(VisitStatsException.class)
     public ResponseEntity<Result<Void>> handleVisitStatsException(VisitStatsException exception) {
+        return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
+    }
+
+    @ExceptionHandler(ShopReviewException.class)
+    public ResponseEntity<Result<Void>> handleShopReviewException(ShopReviewException exception) {
         return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
     }
 

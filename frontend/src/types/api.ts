@@ -122,6 +122,14 @@ export interface Shop {
   updateTime?: DateValue
 }
 
+export interface ShopReview {
+  id: Id; shopId: Id; userId: Id; userName: string; userIcon?: string | null
+  overallScore: number; tasteScore: number; environmentScore: number; serviceScore: number
+  content: string; tags: string[]; createTime: DateValue
+}
+export interface ShopReviewPage { records: ShopReview[]; total: number; current: number; size: number; pages: number; averageScore?: number | null }
+export interface ShopReviewTagOption { code: string; name: string }
+
 export interface Voucher {
   id?: Id
   shopId?: Id

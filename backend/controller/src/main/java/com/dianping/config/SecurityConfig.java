@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, exception) ->
                                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.POST, "/shop/*/reviews").authenticated()
                         .requestMatchers(
                                 "/user/login/code",
                                 "/user/register/code",
@@ -52,6 +53,8 @@ public class SecurityConfig {
                                 "/user/login",
                                 "/user/refresh",
                                 "/user/logout",
+                                "/shop/review-tags",
+                                "/shop/*/reviews",
                                 "/shop/**",
                                 "/voucher/**",
                                 "/shop-type/**",

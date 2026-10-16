@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ShopDetailView from './ShopDetailView.vue'
 import { ApiError } from '@/api/http'
 
-const { getShop, getVouchers, seckillVoucher, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
-  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
+const { getShop, getVouchers, seckillVoucher, getShopReviews, getReviewTags, publishShopReview, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
+  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), getShopReviews: vi.fn(), getReviewTags: vi.fn(), publishShopReview: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
 }))
 
 const route = reactive({ params: { id: '8' }, fullPath: '/shops/8' })
 vi.mock('@/api/shop', () => ({ getShop, getVouchers, seckillVoucher }))
+vi.mock('@/api/shopReview', () => ({ getShopReviews, getReviewTags, publishShopReview }))
 vi.mock('@/api/traffic', async (importOriginal) => ({ ...await importOriginal<typeof import('@/api/traffic')>(), sendVisit }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
 vi.mock('element-plus', () => ({ ElMessage: { error: messageError, success: vi.fn(), warning: vi.fn() } }))
@@ -30,6 +31,9 @@ describe('ShopDetailView', () => {
     route.params.id = '8'; route.fullPath = '/shops/8'
     getShop.mockReset().mockResolvedValue({ id: 8, name: '巷口咖啡' })
     getVouchers.mockReset().mockResolvedValue([])
+    getShopReviews.mockReset().mockResolvedValue({ records: [], total: 0, current: 1, size: 10, pages: 0, averageScore: 4.8 })
+    getReviewTags.mockReset().mockResolvedValue([])
+    publishShopReview.mockReset().mockResolvedValue(1)
     seckillVoucher.mockReset().mockResolvedValue(99)
     push.mockReset(); messageError.mockReset(); authState.authenticated = false
   })
