@@ -8,7 +8,7 @@
 
 | 所在模块 | 类型 | 负责什么 | 阅读时关注什么 |
 | --- | --- | --- | --- |
-| domain | annotation.TaskNode | 声明节点 ID、组、阶段、执行类型与重要性 | 元数据本身不依赖 Spring，也不会自动成为 Bean |
+| domain | annotation.TaskNode | 声明 nodeId、nodeName、description、组、阶段、执行类型与重要性 | 元数据本身不依赖 Spring，也不会自动成为 Bean |
 | domain | model.TaskNodeHandler / TaskNodeHolder | 节点处理契约、处理器与元数据的绑定 | Handler 做一个业务步骤；Holder 供引擎执行 |
 | domain | model.TaskNodeRegistry | 注册、唯一性、分组、排序与冻结 | 不在 domain 内扫描 Spring |
 | domain | model.TaskContext | 输入、节点局部写集、已接受结果与最终状态 | 并行节点拥有独立容器，结果对象仍遵守只读约定 |
@@ -114,7 +114,7 @@ taskchain:
 | --- | --- |
 | 定义用例输入输出 | 建议使用不可变 record，把身份等必要信息放入 input |
 | 实现业务节点 | 实现 `TaskNodeHandler<I, O>`，通过构造器注入所需领域能力 |
-| 声明节点元数据 | 加 `@TaskNode`，显式填写 id、group、phase、taskType；order 默认 0，required 默认 true |
+| 声明节点元数据 | 加 `@TaskNode`，显式填写 nodeId、group、phase、taskType；nodeName、description 可选；order 默认 0，required 默认 true |
 | 注册为 Spring Bean | 同时使用 `@Component` 或配置类的 `@Bean`；TaskNode 自身不是 Spring 组件注解 |
 | 调用引擎 | 在用例入口注入 `TaskChainEngine`，每次请求创建 Context，并选择默认链或显式阶段配置 |
 | 处理执行结果 | 先检查 `isSuccess()`；成功后读 output，可选失败另从节点报告观察 |
@@ -122,6 +122,21 @@ taskchain:
 实际业务节点放在对应业务的 application 用例层；共享 domain 内核不引用 Spring。当前既有 service 模块不反向依赖这些新模块，本轮未修改已有业务调用链。
 
 同一 group 的节点 ID 不能重复；阶段内按 order 再按 ID 排序。并行阶段中的排序只控制提交顺序，不建立节点依赖。节点注册表启动后冻结，无节点时允许启动；执行未知 group 会报参数错误。
+
+`nodeId` 用于定位，`nodeName` 用于展示；名称为空、纯空白或手动注册时为 null，都回退到 nodeId。名称由注解传入 TaskNodeHolder，最终进入 NodeExecutionResult.nodeName()；description 仅保存在 Holder，供节点说明使用。名称无需唯一，不影响排序或重复注册检查。
+
+```java
+@TaskNode(
+    nodeId = "load-shop",
+    nodeName = "加载店铺基础信息",
+    description = "按输入店铺编号查询基础信息，写入 shop 属性",
+    group = "shop-detail",
+    phase = ProcessPhase.DATA_PROCESSING,
+    taskType = TaskType.IO_BOUND
+)
+```
+
+手动注册可使用完整构造器 `(nodeId, nodeName, description, group, phase, order, taskType, required, handler)`，也可继续使用本文示例中的七参数构造器省略名称和描述。旧注解的 `id = ...` 改为 `nodeId = ...`，原 Holder 的 `id()` 改为 `nodeId()`；直接构造 NodeExecutionResult 时，需要在 nodeId 后传入 nodeName。
 
 ## 4. 节点之间如何传递结果
 
@@ -154,15 +169,15 @@ taskchain:
 
 ## 6. 本轮验证记录
 
-验证日期：2026-10-16。Java 21，使用项目 Maven 多模块测试。
+验证日期：2026-10-16，已包含节点名称与描述的增量实现。Java 21，使用项目 Maven 多模块测试。
 
 | 验证范围 | 结果 |
 | --- | --- |
 | TaskChainEngineTest | 23 项通过：串并行、快速失败、超时、冲突、阶段提交、排队、拒绝、中断与请求隔离 |
 | TaskContextTest | 4 项通过：只读容器、集合类型保持、生命周期与节点主动失败 |
-| TaskNodeRegistryTest | 4 项通过：唯一性、排序、冻结、参数校验 |
-| TaskChainConfigurationTest | 14 项通过：Spring 代理与装配、配置、有界池、共享关闭预算、禁止继承线程本地身份 |
-| 后端默认完整套件 | 共 180 项，164 项通过、16 项按原有环境开关跳过，0 失败、0 错误；BUILD SUCCESS |
+| TaskNodeRegistryTest | 7 项通过：唯一性、排序、冻结、参数校验，以及空名称回退并进入失败报告 |
+| TaskChainConfigurationTest | 15 项通过：Spring 代理与装配、配置、有界池、共享关闭预算、禁止继承线程本地身份、元数据传递和默认值 |
+| 后端默认完整套件 | 共 184 项，168 项通过、16 项按原有环境开关跳过，0 失败、0 错误；BUILD SUCCESS |
 | 架构测试 | ArchitectureLayoutTest 的 3 项通过，包含在后端完整套件中 |
 | 文档示例 | 从本文直接提取 Java 代码，独立编译运行；成功输出示例详情并保留可选失败诊断 |
 | Standards 独立审查 | 硬规范违例 0 项，值得处理的可能 smell 0 项 |

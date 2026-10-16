@@ -16,8 +16,8 @@ public final class TaskNodeRegistry {
         if (frozen) throw new IllegalStateException("节点注册表已经冻结");
         Objects.requireNonNull(holder, "节点不得为空");
         var nodes = groups.computeIfAbsent(holder.group(), ignored -> new ArrayList<>());
-        if (nodes.stream().anyMatch(node -> node.id().equals(holder.id()))) {
-            throw new IllegalArgumentException("任务组内节点 id 重复：" + holder.group() + "/" + holder.id());
+        if (nodes.stream().anyMatch(node -> node.nodeId().equals(holder.nodeId()))) {
+            throw new IllegalArgumentException("任务组内节点 nodeId 重复：" + holder.group() + "/" + holder.nodeId());
         }
         nodes.add(holder);
     }
@@ -25,7 +25,7 @@ public final class TaskNodeRegistry {
     public synchronized void freeze() {
         groups.replaceAll((group, nodes) -> nodes.stream()
                 .sorted(Comparator.<TaskNodeHolder<?, ?>>comparingInt(TaskNodeHolder::order)
-                        .thenComparing(TaskNodeHolder::id)).toList());
+                        .thenComparing(TaskNodeHolder::nodeId)).toList());
         frozen = true;
     }
 

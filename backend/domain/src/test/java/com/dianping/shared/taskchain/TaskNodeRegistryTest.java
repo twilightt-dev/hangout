@@ -4,12 +4,36 @@ import com.dianping.shared.taskchain.enums.*;
 import com.dianping.shared.taskchain.model.*;
 import com.dianping.shared.taskchain.service.TaskChainEngine;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TaskNodeRegistryTest {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" \t"})
+    void missingDisplayNameFallsBackToNodeIdInRegistrationAndFailureReport(String name) {
+        var registry = new TaskNodeRegistry();
+        registry.register(new TaskNodeHolder<Integer, String>("load-promotion", name, "加载可选优惠",
+                "shop", ProcessPhase.DATA_PROCESSING, 0, TaskType.IO_BOUND, false,
+                context -> { throw new IllegalStateException("优惠暂不可用"); }));
+        registry.freeze();
+        assertEquals("load-promotion", registry.nodes("shop", ProcessPhase.DATA_PROCESSING).getFirst().nodeName());
+        try (var pool = Executors.newFixedThreadPool(1)) {
+            var result = new TaskChainEngine(registry, pool, pool, Duration.ofSeconds(2))
+                    .executeChain("shop", new TaskContext<Integer, String>(7));
+            assertTrue(result.isSuccess());
+            var report = result.getNodeResults().getFirst();
+            assertEquals("load-promotion", report.nodeId());
+            assertEquals("load-promotion", report.nodeName());
+            assertEquals(NodeExecutionStatus.FAILED, report.status());
+        }
+    }
+
     @Test
     void idsAreUniqueWithinGroupAndOrderingIsStableAfterFreeze() {
         var registry = new TaskNodeRegistry();
@@ -21,7 +45,9 @@ class TaskNodeRegistryTest {
         assertThrows(IllegalStateException.class, () -> registry.nodes("shop", ProcessPhase.DATA_PROCESSING));
         registry.freeze();
         assertEquals(List.of("z", "a", "b"), registry.nodes("shop", ProcessPhase.DATA_PROCESSING)
-                .stream().map(TaskNodeHolder::id).toList());
+                .stream().map(TaskNodeHolder::nodeId).toList());
+        assertEquals("z", registry.nodes("shop", ProcessPhase.DATA_PROCESSING).getFirst().nodeName());
+        assertEquals("", registry.nodes("shop", ProcessPhase.DATA_PROCESSING).getFirst().description());
         assertThrows(UnsupportedOperationException.class, () -> registry.nodes("shop", ProcessPhase.DATA_PROCESSING).clear());
         assertThrows(IllegalStateException.class, () -> registry.register(node("new", "shop", 0)));
         assertThrows(NullPointerException.class, () -> registry.nodes("shop", null));

@@ -25,6 +25,27 @@ class TaskChainConfigurationTest {
             .withUserConfiguration(TaskChainConfiguration.class);
 
     @Test
+    void omittedAnnotationNameUsesNodeIdAndEmptyDescription() {
+        runner.withBean(DefaultNameNode.class).run(context -> {
+            assertNull(context.getStartupFailure());
+            var node = context.getBean(TaskNodeRegistry.class).nodes("shop", ProcessPhase.DATA_PROCESSING).getFirst();
+            assertEquals("unnamed", node.nodeName());
+            assertEquals("", node.description());
+            var result = context.getBean(TaskChainEngine.class)
+                    .executeChain("shop", new TaskContext<Integer, String>(7));
+            assertTrue(result.isSuccess());
+            assertEquals("unnamed", result.getNodeResults().getFirst().nodeName());
+        });
+    }
+
+    @TaskNode(nodeId = "unnamed", group = "shop", phase = ProcessPhase.DATA_PROCESSING, taskType = TaskType.CPU_BOUND)
+    static class DefaultNameNode implements TaskNodeHandler<Integer, String> {
+        @Override public void execute(TaskContext<Integer, String> context) {
+            context.setOutput("店铺-" + context.getInput());
+        }
+    }
+
+    @Test
     void workerThreadsDoNotImplicitlyInheritCallerIdentity() {
         var identity = new InheritableThreadLocal<String>();
         identity.set("调用方身份");
@@ -151,11 +172,17 @@ class TaskChainConfigurationTest {
     void discoversTargetAnnotationButInvokesActualJdkProxyBean() {
         runner.withUserConfiguration(ProxyNodes.class).run(context -> {
             assertNull(context.getStartupFailure());
+            var node = context.getBean(TaskNodeRegistry.class).nodes("shop", ProcessPhase.DATA_PROCESSING).getFirst();
+            assertEquals("shop", node.nodeId());
+            assertEquals("加载店铺基础信息", node.nodeName());
+            assertEquals("根据店铺编号生成示例详情", node.description());
             var result = context.getBean(TaskChainEngine.class)
                     .executeChain("shop", new TaskContext<Integer, String>(7));
             assertTrue(result.isSuccess());
             assertEquals("店铺-7", result.getOutput());
             assertEquals(Boolean.TRUE, result.getAttribute("advice"));
+            assertEquals("shop", result.getNodeResults().getFirst().nodeId());
+            assertEquals("加载店铺基础信息", result.getNodeResults().getFirst().nodeName());
         });
     }
 
@@ -191,7 +218,8 @@ class TaskChainConfigurationTest {
         @Bean ShopNode shopNode() { return new ShopNode(); }
     }
 
-    @TaskNode(id = "shop", group = "shop", phase = ProcessPhase.DATA_PROCESSING, taskType = TaskType.CPU_BOUND)
+    @TaskNode(nodeId = "shop", nodeName = "加载店铺基础信息", description = "根据店铺编号生成示例详情",
+            group = "shop", phase = ProcessPhase.DATA_PROCESSING, taskType = TaskType.CPU_BOUND)
     static class ShopNode implements TaskNodeHandler<Integer, String> {
         @Override public void execute(TaskContext<Integer, String> context) {
             context.setOutput("店铺-" + context.getInput());

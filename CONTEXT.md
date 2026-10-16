@@ -323,6 +323,7 @@ TaskNodeHandler.execute(context) 定义节点处理契约；TaskChainEngine.exec
 - 共享任务链放在 domain 模块，包根为 com.dianping.shared.taskchain。
 - 分为 annotation、enums、model、service 四个子包。
 - annotation 中定义 TaskNode；enums 包含 ExecutionMode、ProcessPhase 和 TaskType。
+- 节点元数据使用 nodeId、nodeName 和 description；nodeId 在同组内唯一，名称为空或空白时回退到 nodeId。名称进入 NodeExecutionResult，描述保存在 TaskNodeHolder，不参与执行决策；阶段和任务类型仍显式填写，required 及阶段级超时语义保持不变。
 - model 使用上文列出的六个模型/契约；service 包含 TaskChainEngine、PhaseExecutionEngine 和 TaskDispatcher。
 - CPU 与 IO 任务分别使用对应线程池。
 - 2026-10-16 用户确认沿用 PRE_VALIDATION、PRE_PROCESSING、DATA_PROCESSING、DATA_INSERTION、POST_PROCESSING 五个阶段，各链选择需要的阶段及顺序。

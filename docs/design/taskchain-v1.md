@@ -21,7 +21,7 @@ domain 包根为用户指定的 com.dianping.shared.taskchain。
 
 | 包 | 类型 | 职责 |
 | --- | --- | --- |
-| annotation | TaskNode | 节点元数据；包含 id、group、phase、order、taskType、required |
+| annotation | TaskNode | 节点元数据；包含 nodeId、nodeName、description、group、phase、order、taskType、required |
 | enums | ExecutionMode | SERIAL、PARALLEL，表示模式而非状态 |
 | enums | ProcessPhase | 已确认的五个阶段 |
 | enums | TaskType | CPU_BOUND、IO_BOUND，选择对应执行器 |
@@ -97,9 +97,10 @@ executeChain 按五阶段默认顺序、全部串行执行。executePhaseChain �
 
 | 项目 | 约定 |
 | --- | --- |
-| 节点 ID | 同一 group 内唯一，不同 group 可复用；空白 id/group 非法 |
+| 节点 ID | nodeId 在同一 group 内唯一，不同 group 可复用；空白 nodeId/group 非法 |
 | 排序 | 阶段内按 order 升序，相同 order 按 nodeId 稳定排序；并行排序不表示依赖 |
-| 注解 | id/group/phase/taskType 显式填写；order 默认 0，required 默认 true |
+| 注解 | nodeId/group/phase/taskType 显式填写；order 默认 0，required 默认 true |
+| 展示元数据 | nodeName、description 默认为空字符串；Holder 将缺失或空白名称回退到 nodeId，手动注册的 null 描述归一为空字符串；名称进入节点执行报告，描述仅保存在 Holder |
 | 注册生命周期 | 启动时注册校验，装配后冻结；无节点允许启动，执行未知 group 报错 |
 | 阶段列表 | 非空、无 null、无重复阶段；超时为正；运行前整体校验 |
 | 阶段选择 | 未选择阶段不执行；选中但无节点的阶段作为空阶段完成 |

@@ -108,7 +108,7 @@ public final class PhaseExecutionEngine {
                 var keys = new HashSet<>(outcome.writes().attributes().keySet());
                 keys.addAll(outcome.writes().removals());
                 if (keys.stream().anyMatch(touched::contains) || (outputWritten && outcome.writes().outputWritten())) {
-                    fatal = new IllegalStateException("并行节点结果存在同名属性或 output 冲突：" + node.id());
+                    fatal = new IllegalStateException("并行节点结果存在同名属性或 output 冲突：" + node.nodeId());
                     return;
                 }
                 touched.addAll(keys);
@@ -124,7 +124,7 @@ public final class PhaseExecutionEngine {
             expired = true;
             for (int i = 0; i < nodes.size(); i++) {
                 if (reports[i] != null) continue;
-                var timeout = new TimeoutException("阶段预算耗尽，节点未及时完成：" + nodes.get(i).id());
+                var timeout = new TimeoutException("阶段预算耗尽，节点未及时完成：" + nodes.get(i).nodeId());
                 reports[i] = report(nodes.get(i), NodeExecutionStatus.TIMED_OUT, timeout);
                 if (nodes.get(i).required() && fatal == null) fatal = timeout;
             }
@@ -132,6 +132,6 @@ public final class PhaseExecutionEngine {
     }
 
     static NodeExecutionResult report(TaskNodeHolder<?, ?> node, NodeExecutionStatus status, Throwable error) {
-        return new NodeExecutionResult(node.id(), node.group(), node.phase(), node.required(), status, error);
+        return new NodeExecutionResult(node.nodeId(), node.nodeName(), node.group(), node.phase(), node.required(), status, error);
     }
 }

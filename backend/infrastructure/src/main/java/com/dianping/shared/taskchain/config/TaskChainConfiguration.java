@@ -33,7 +33,8 @@ public class TaskChainConfiguration {
     }
 
     private static <I, O> void register(TaskNodeRegistry registry, TaskNodeHandler<I, O> handler, TaskNode metadata) {
-        registry.register(new TaskNodeHolder<>(metadata.id(), metadata.group(), metadata.phase(), metadata.order(),
+        registry.register(new TaskNodeHolder<>(metadata.nodeId(), metadata.nodeName(), metadata.description(),
+                metadata.group(), metadata.phase(), metadata.order(),
                 metadata.taskType(), metadata.required(), handler));
     }
 
