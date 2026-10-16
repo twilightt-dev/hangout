@@ -1,27 +1,24 @@
 package com.dianping.shared.taskchain.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
+@Setter
+@Getter
 @ConfigurationProperties(prefix = "taskchain")
 public class TaskChainProperties {
+    //线程数
     private int cpuThreads = Math.max(1, Runtime.getRuntime().availableProcessors());
     private int ioThreads = Math.max(4, 2 * Runtime.getRuntime().availableProcessors());
+    //队列数量
     private int queueCapacity = 128;
     private Duration defaultPhaseTimeout = Duration.ofMillis(3000);
+    //阶段执行的超时时间
     private Duration shutdownTimeout = Duration.ofSeconds(5);
 
-    public int getCpuThreads() { return cpuThreads; }
-    public void setCpuThreads(int cpuThreads) { this.cpuThreads = cpuThreads; }
-    public int getIoThreads() { return ioThreads; }
-    public void setIoThreads(int ioThreads) { this.ioThreads = ioThreads; }
-    public int getQueueCapacity() { return queueCapacity; }
-    public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
-    public Duration getDefaultPhaseTimeout() { return defaultPhaseTimeout; }
-    public void setDefaultPhaseTimeout(Duration defaultPhaseTimeout) { this.defaultPhaseTimeout = defaultPhaseTimeout; }
-    public Duration getShutdownTimeout() { return shutdownTimeout; }
-    public void setShutdownTimeout(Duration shutdownTimeout) { this.shutdownTimeout = shutdownTimeout; }
-
+    //参数校验
     public void validate() {
         if (cpuThreads <= 0 || ioThreads <= 0 || queueCapacity <= 0) {
             throw new IllegalArgumentException("任务链线程数与队列容量必须为正数");

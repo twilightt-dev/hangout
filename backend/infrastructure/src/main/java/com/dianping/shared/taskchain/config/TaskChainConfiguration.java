@@ -15,15 +15,19 @@ import java.util.List;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(TaskChainProperties.class)
 public class TaskChainConfiguration {
-    @Bean(destroyMethod = "close")
+
+    //创建线程池管理对象
+    //复习一下，注册为bean就是把这个方法返回的对象交给Spring管理
+    @Bean(destroyMethod = "close")//规定销毁bean时调用它自己定义的close方法
     public TaskChainExecutors taskChainExecutors(TaskChainProperties properties) {
         return new TaskChainExecutors(properties);
     }
 
-    @Bean
+    @Bean//创建注册表                //这里生命的是一个集合，因此Spring会收集容器中匹配TaskNodeHandler类型的bean
     public TaskNodeRegistry taskNodeRegistry(List<TaskNodeHandler<?, ?>> handlers) {
         var registry = new TaskNodeRegistry();
         for (var handler : handlers) {
+            //从每个节点上读取元数据
             var metadata = AnnotatedElementUtils.findMergedAnnotation(AopUtils.getTargetClass(handler), TaskNode.class);
             if (metadata == null) throw new IllegalArgumentException("任务处理器缺少 @TaskNode：" + handler.getClass().getName());
             register(registry, handler, metadata);
