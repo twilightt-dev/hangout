@@ -167,6 +167,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         }
 
         Shop before = getById(id);
+        if (before != null) {
+            // 评分和评价数由店铺评价用例维护，普通店铺修改不能接收客户端覆盖。
+            shop.setScore(before.getScore());
+            shop.setComments(before.getComments());
+        }
         //为了保持数据库与缓存一致性，先操作数据库再删除缓存
         if (!updateById(shop)) {
             return Result.error("店铺不存在");
@@ -179,6 +184,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
     @Override
     @Transactional
     public boolean save(Shop shop) {
+        // 新店铺尚无评价，汇总字段由评价模块从零开始维护。
+        shop.setScore(0);
+        shop.setComments(0);
         boolean saved = super.save(shop);
         if (saved) {
             syncGeo(null, shop);
