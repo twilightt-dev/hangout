@@ -6,6 +6,8 @@ import { ApiError } from '@/api/http'
 
 const { getShopSetmeals } = vi.hoisted(() => ({ getShopSetmeals: vi.fn() }))
 vi.mock('@/api/shopSetmeal', () => ({ getShopSetmeals }))
+const { getRecommendDishes } = vi.hoisted(() => ({ getRecommendDishes: vi.fn() }))
+vi.mock('@/api/recommendDish', () => ({ getRecommendDishes, publishRecommendDish: vi.fn(), recommendDish: vi.fn() }))
 
 const { getShop, getVouchers, seckillVoucher, getShopReviews, getReviewTags, publishShopReview, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
   getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), getShopReviews: vi.fn(), getReviewTags: vi.fn(), publishShopReview: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
@@ -35,11 +37,26 @@ describe('ShopDetailView', () => {
     getShop.mockReset().mockResolvedValue({ id: 8, name: '巷口咖啡' })
     getVouchers.mockReset().mockResolvedValue([])
     getShopSetmeals.mockReset().mockResolvedValue([])
+    getRecommendDishes.mockReset().mockResolvedValue({ records: [], total: 0, current: 1, size: 6, pages: 0 })
     getShopReviews.mockReset().mockResolvedValue({ records: [], total: 0, current: 1, size: 10, pages: 0, averageScore: 4.8 })
     getReviewTags.mockReset().mockResolvedValue([])
     publishShopReview.mockReset().mockResolvedValue(1)
     seckillVoucher.mockReset().mockResolvedValue(99)
     push.mockReset(); messageError.mockReset(); authState.authenticated = false
+  })
+
+  it('推荐菜通过独立接口展示，失败时保留店铺其他内容', async () => {
+    getRecommendDishes.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
+      records: [{ id: 1, shopId: 8, name: '招牌烤鱼', coverImage: '/imgs/fish.png', recommendCount: 3, recommended: false, createTime: '2026-10-18T12:00:00' }],
+      total: 1, current: 1, size: 6, pages: 1,
+    })
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.text()).toContain('巷口咖啡')
+    expect(wrapper.text()).toContain('推荐菜加载失败')
+    expect(wrapper.text()).toContain('店铺评价')
+    await wrapper.get('[data-test="dish-retry"]').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('招牌烤鱼')
+    expect(wrapper.text()).toContain('3 人推荐')
   })
 
   it('套餐加载失败时仍展示商详、优惠券与评价，并支持区块内重试', async () => {

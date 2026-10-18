@@ -17,10 +17,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import com.dianping.shopdetail.exception.ShopReviewException;
 import com.dianping.shopdetail.exception.ShopSetmealException;
+import com.dianping.shopdetail.exception.RecommendDishException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RecommendDishException.class)
+    public ResponseEntity<Result<Void>> handleRecommendDishException(RecommendDishException exception) {
+        return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Result<Void>> handleResponseStatusException(ResponseStatusException exception) {
