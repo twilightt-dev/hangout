@@ -4,6 +4,12 @@
 
 请全程使用中文，包括项目代码的注释
 
+## 一些自动化操作的约定
+
+每次开发完成后在前端目录执行npm run build，并把构建产物放到D:\devprojects\java-projects\comment\nginx-1.18.0\html\hmdp目录下
+
+
+
 ## 项目的文档分层
 按照下面这个例子的结构：
 
