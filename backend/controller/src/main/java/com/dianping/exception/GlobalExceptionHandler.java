@@ -4,6 +4,7 @@ import com.dianping.result.Result;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import com.dianping.shopdetail.exception.ShopReviewException;
+import com.dianping.shopdetail.exception.ShopSetmealException;
 
 @Slf4j
 @RestControllerAdvice
@@ -33,6 +35,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ShopReviewException.class)
     public ResponseEntity<Result<Void>> handleShopReviewException(ShopReviewException exception) {
+        return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
+    }
+
+    @ExceptionHandler(ShopSetmealException.class)
+    public ResponseEntity<Result<Void>> handleShopSetmealException(ShopSetmealException exception) {
         return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
     }
 
@@ -81,9 +88,9 @@ public class GlobalExceptionHandler {
         return Result.error("请求体格式错误");
     }
 
-    @ExceptionHandler(DataAccessException.class)
+    @ExceptionHandler({DataAccessException.class, CannotCreateTransactionException.class})
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-    public Result<Void> handleDataAccessException(DataAccessException exception) {
+    public Result<Void> handleDataAccessException(RuntimeException exception) {
         log.error("Redis 或数据库访问失败", exception);
         return Result.error("服务暂时不可用，请稍后重试");
     }

@@ -147,6 +147,25 @@ export interface Voucher {
   updateTime?: DateValue
 }
 
+export interface ShopSetmealItem {
+  name: string
+  quantity: number
+  unit: string
+}
+
+export interface ShopSetmeal {
+  id: Id
+  shopId: Id
+  name: string
+  coverImage: string
+  price: number
+  originalPrice?: number | null
+  people: number
+  description?: string | null
+  rules: string
+  items: ShopSetmealItem[]
+}
+
 export interface Blog {
   id?: Id
   shopId?: Id

@@ -8,6 +8,7 @@ backend/.settings/
 docs/*
 !docs/adr/
 docs/adr/*
+!docs/adr/0015-店铺套餐独立建表并通过DDD提供展示查询.md
 !docs/adr/0007-博客与店铺访问统计采用展示上报和近似访客计数.md
 !docs/adr/0008-DDD升级采用九模块渐进迁移并保持兼容.md
 !docs/adr/0009-评论点赞关系使用Redis计数保存在MySQL.md
