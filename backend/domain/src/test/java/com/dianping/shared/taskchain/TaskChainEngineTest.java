@@ -29,7 +29,16 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 通过公开入口验证任务链执行顺序、隔离和失败边界。
+ */
 class TaskChainEngineTest {
+    /**
+     * 验证队列等待计入阶段预算，未启动且已取消的任务不再运行。
+     *
+     * @param required 是否为失败后阻断链路的必需节点
+     * @throws Exception 测试请求、并发等待或隔离环境初始化失败
+     */
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void queueWaitingConsumesTheStageBudgetAndCancelledWorkNeverStarts(boolean required) throws Exception {
@@ -57,6 +66,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证失败并行节点的丢弃写集不与成功结果产生冲突。
+     */
     @Test
     void failedParallelWritesDoNotConflictWithAcceptedSuccessfulWrites() {
         var registry = new TaskNodeRegistry();
@@ -80,6 +92,11 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证并发请求之间不会混用上下文业务数据。
+     *
+     * @throws Exception 测试请求、并发等待或隔离环境初始化失败
+     */
     @Test
     void simultaneousRequestsNeverMixTheirContextData() throws Exception {
         var bothStarted = new CountDownLatch(2);
@@ -107,6 +124,11 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证调用线程中断会终止阶段并保留中断标记。
+     *
+     * @throws Exception 测试请求、并发等待或隔离环境初始化失败
+     */
     @Test
     void callerInterruptionEndsTheStageAndPreservesInterruptStatus() throws Exception {
         var entered = new CountDownLatch(1);
@@ -139,6 +161,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证串行节点共享阶段预算，不逐节点重置超时。
+     */
     @Test
     void serialNodesShareOneBudgetInsteadOfReceivingFreshTimeouts() {
         var registry = new TaskNodeRegistry();
@@ -158,6 +183,12 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证线程池拒绝任务形成节点诊断，且遵守必需和可选规则。
+     *
+     * @param mode 阶段内串行或并行执行方式
+     * @param required 是否为失败后阻断链路的必需节点
+     */
     @ParameterizedTest
     @CsvSource({"SERIAL,false", "SERIAL,true", "PARALLEL,false", "PARALLEL,true"})
     void rejectionIsDiagnosedAndRespectsNodeImportance(ExecutionMode mode, boolean required) {
@@ -182,6 +213,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证自定义阶段顺序及串行覆盖结果的合法语义。
+     */
     @Test
     void configuredPhaseOrderControlsExecutionAndSerialUpdatesCanReplaceResults() {
         var registry = new TaskNodeRegistry();
@@ -207,6 +241,11 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证必需失败尽快返回，迟到节点无法改写结果。
+     *
+     * @throws Exception 测试请求、并发等待或隔离环境初始化失败
+     */
     @Test
     void requiredFailureReturnsBeforeBlockedPeerAndLateWritesCannotChangeResult() throws Exception {
         var registry = new TaskNodeRegistry();
@@ -252,6 +291,13 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证阶段到期根据未完成节点的必需性决定能否继续。
+     *
+     * @param mode 阶段内串行或并行执行方式
+     * @param required 是否为失败后阻断链路的必需节点
+     * @throws Exception 测试请求、并发等待或隔离环境初始化失败
+     */
     @ParameterizedTest
     @CsvSource({"SERIAL,false", "SERIAL,true", "PARALLEL,false", "PARALLEL,true"})
     void stageDeadlineDistinguishesOptionalAndRequiredUnfinishedNodes(ExecutionMode mode, boolean required) throws Exception {
@@ -292,6 +338,11 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 模拟无法立即中断的外部任务，用于验证迟到写入隔离。
+     *
+     * @param latch 协调测试线程执行时机的计数门闩
+     */
     private static void awaitIgnoringInterrupts(CountDownLatch latch) {
         boolean interrupted = false;
         for (;;) {
@@ -301,6 +352,11 @@ class TaskChainEngineTest {
         if (interrupted) Thread.currentThread().interrupt();
     }
 
+    /**
+     * 验证并行写入冲突拒绝整个阶段，节点可选性不放宽冲突约束。
+     *
+     * @param conflict 并行写集是否发生冲突
+     */
     @ParameterizedTest
     @ValueSource(strings = {"attribute", "remove", "output"})
     void parallelConflictsRejectTheWholePhaseEvenForOptionalNodes(String conflict) {
@@ -335,6 +391,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证并行节点读取相同起始快照，只合并各自增量。
+     */
     @Test
     void parallelNodesReadTheSameSnapshotAndCommitOnlyTheirOwnWrites() {
         var registry = new TaskNodeRegistry();
@@ -364,6 +423,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证必需失败拒绝本阶段写入，并报告后续未执行节点。
+     */
     @Test
     void requiredFailureRollsBackItsWholePhaseAndReportsUnexecutedNodes() {
         var registry = new TaskNodeRegistry();
@@ -393,6 +455,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证可选节点失败丢弃本地修改且允许后续阶段继续。
+     */
     @Test
     void optionalFailureDiscardsItsWritesAndContinues() {
         var registry = new TaskNodeRegistry();
@@ -420,6 +485,9 @@ class TaskChainEngineTest {
         }
     }
 
+    /**
+     * 验证串行节点可以读取前序成功节点提交的数据。
+     */
     @Test
     void serialNodesPassAcceptedDataToFollowingNodes() {
         var registry = new TaskNodeRegistry();

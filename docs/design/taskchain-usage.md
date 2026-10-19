@@ -140,6 +140,43 @@ taskchain:
 
 ## 4. 节点之间如何传递结果
 
+### 业务上下文继承
+
+2026-10-19 起支持业务上下文继承 TaskContext，业务节点拿到的子上下文也保留该类型。以简化的名称查询为例：
+
+```java
+public class ShopContext extends TaskContext<Long, String> {
+    public ShopContext(Long shopId) {
+        super(shopId);
+    }
+
+    private ShopContext(ShopContext parent, Snapshot<String> snapshot) {
+        super(parent, snapshot);
+    }
+
+    @Override
+    protected ShopContext createNodeContext(Snapshot<String> snapshot) {
+        return new ShopContext(this, snapshot);
+    }
+
+    public String getShopName() {
+        return (String) getAttribute("shopName");
+    }
+
+    public void setShopName(String name) {
+        setAttribute("shopName", name);
+    }
+}
+```
+
+节点仍实现 TaskNodeHandler<Long, String>，在 execute 中通过 `ShopContext business = (ShopContext) context` 访问业务方法。调用方可以直接使用 `ShopContext result = engine.executeChain(group, new ShopContext(shopId))`。同一组的业务节点必须与调用入口使用的上下文类型匹配。
+
+子类必须覆盖工厂并通过 `super(parent, snapshot)` 创建全新节点实例；漏写工厂、返回其他类型、错误执行身份、复用主上下文或节点实例都会报错并进入节点失败报告。工厂仅负责轻量对象创建，不做业务查询。基础读写与生命周期方法保持 final，子类新增业务访问方法即可。
+
+不能只声明 `private String shopName` 并用 Lombok 直接生成 setter：该字段不会参与 Snapshot/WriteSet，无法自动合并回根上下文。业务结果通过 getAttribute/setAttribute 访问；列表等属性值仍遵守只读协议。所有节点继承以下提交规则。
+
+本次继承扩展验证：TaskContextInheritanceTest 的 7 项测试与 application 的 ShopDetailTaskContextTest 的 1 项测试通过，覆盖真实引擎中的子类类型、串行传递、并行快照隔离、同名冲突、失败写入丢弃、节点工厂校验及封存。完整后端回归为 208 项通过、16 项跳过、1 项架构测试失败；失败原因是工作区已有的 domain Lombok 依赖与零生产依赖约束冲突，未在此次改造中调整。前端构建通过并按仓库约定复制产物。
+
 | 情况 | 可见性与提交规则 |
 | --- | --- |
 | 串行节点 A 成功后执行 B | B 能读取 A 的成功结果；阶段整体成功后才提交主上下文 |
