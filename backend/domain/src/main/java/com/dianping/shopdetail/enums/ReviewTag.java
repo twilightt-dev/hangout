@@ -2,9 +2,6 @@ package com.dianping.shopdetail.enums;
 
 import java.util.Arrays;
 
-/**
- * 稳定代码用于持久化，展示名称可独立调整。
- */
 public enum ReviewTag {
     /**
      * 味道好。
