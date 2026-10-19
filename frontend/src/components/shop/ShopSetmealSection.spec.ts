@@ -10,6 +10,7 @@ const meal = {
   people: 2, description: '一起分享好味道', rules: '无需预约\n周末可用',
   items: [{ name: '烤鱼', quantity: 1, unit: '份' }, { name: '饮料', quantity: 2, unit: '杯' }],
 }
+const page = (records: Array<Omit<typeof meal, 'originalPrice' | 'description'> & { originalPrice?: number | null; description?: string | null }>) => ({ records, total: records.length, current: 1, size: 10, pages: records.length ? 1 : 0 })
 const wrappers: ReturnType<typeof mount>[] = []
 function create(shopId = 8) {
   const wrapper = mount(ShopSetmealSection, { props: { shopId } })
@@ -23,8 +24,10 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
 describe('店铺套餐展示', () => {
-  beforeEach(() => { getShopSetmeals.mockReset().mockResolvedValue([meal]) })
+  beforeEach(() => { getShopSetmeals.mockReset().mockResolvedValue(page([meal])) })
   afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()) })
 
   it('展示以元计的价格，点击卡片直接展开固定菜品与多行纯文本规则', async () => {
@@ -43,14 +46,14 @@ describe('店铺套餐展示', () => {
   })
 
   it('店铺没有套餐时隐藏整个区块', async () => {
-    getShopSetmeals.mockResolvedValue([])
+    getShopSetmeals.mockResolvedValue(page([]))
     const wrapper = create()
     await flushPromises()
     expect(wrapper.find('section').exists()).toBe(false)
   })
 
   it('封面加载失败显示占位，缺少选填字段时隐藏原价与简介', async () => {
-    getShopSetmeals.mockResolvedValue([{ ...meal, originalPrice: null, description: null }])
+    getShopSetmeals.mockResolvedValue(page([{ ...meal, originalPrice: null, description: null }]))
     const wrapper = create()
     await flushPromises()
     expect(wrapper.find('del').exists()).toBe(false)
@@ -61,7 +64,7 @@ describe('店铺套餐展示', () => {
   })
 
   it('加载失败保留可重试区块，重试成功后展示套餐', async () => {
-    getShopSetmeals.mockRejectedValueOnce(new Error('offline')).mockResolvedValue([meal])
+    getShopSetmeals.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(page([meal]))
     const wrapper = create()
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('套餐加载失败')
@@ -72,14 +75,14 @@ describe('店铺套餐展示', () => {
   })
 
   it('切店时取消旧请求，迟到的旧结果不能覆盖新店套餐', async () => {
-    const old = deferred<typeof meal[]>()
-    getShopSetmeals.mockReturnValueOnce(old.promise).mockResolvedValue([{ ...meal, shopId: 9, name: '新店套餐' }])
+    const old = deferred<ReturnType<typeof page>>()
+    getShopSetmeals.mockReturnValueOnce(old.promise).mockResolvedValue(page([{ ...meal, shopId: 9, name: '新店套餐' }]))
     const wrapper = create()
     await wrapper.setProps({ shopId: 9 })
     await flushPromises()
     expect(wrapper.text()).toContain('新店套餐')
     expect(getShopSetmeals.mock.calls[0]?.[1]?.aborted).toBe(true)
-    old.resolve([{ ...meal, name: '旧店套餐' }])
+    old.resolve(page([{ ...meal, name: '旧店套餐' }]))
     await flushPromises()
     expect(wrapper.text()).not.toContain('旧店套餐')
     wrapper.unmount()

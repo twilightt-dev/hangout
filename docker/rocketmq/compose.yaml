@@ -1,0 +1,58 @@
+name: comment-rocketmq
+
+#services下定义的每一项就是一个服务实例，在执行docker compose up后就会创建一个对应容器
+services:
+  #该服务的作用就是初始化docker volume的目录权限
+  volume-init:
+    #指定使用的docker镜像
+    image: apache/rocketmq:5.3.2
+    #表示这个初始化容器使用UID 0、GID 0 ，也就是root用户和root组运行
+    user: "0:0"
+    #volumes的作用就是声明这个服务实例要挂载哪些volume，以及分别挂载到容器内的哪个目录
+    volumes: #注意这里写成同名的就是特指挂载到broker容器内部的对应目录，而不是整个comment-rockermq项目的公共目录
+      - broker-store:/home/rocketmq/store  #消息、消费进度等持久化数据
+      - broker-logs:/home/rocketmq/logs #日志
+    #把两个挂载目录的所有者设为UID:3000 , GID:3000，便于后续使用
+    command: chown 3000:3000 /home/rocketmq/store /home/rocketmq/logs
+    #表示这个容器不设置自动重启策略，完成设置后就自动退出
+    restart: "no"
+
+  #启动地址查询服务
+  namesrv:
+    image: apache/rocketmq:5.3.2
+    #宿主机监听地址:宿主机端口：容器端口
+    ports:
+      - "127.0.0.1:9876:9876"
+    environment:
+      #给容器设置环境变量 意思就是JVM初始堆大小256MB  JVM最大堆大小256MB
+      JAVA_OPT_EXT: "-Xms256m -Xmx256m"
+      #sh是linux常见的一种shell
+    command: sh mqnamesrv
+    #服务退出时自动尝试重启，除非手动停止
+    restart: unless-stopped
+
+  broker:
+    image: apache/rocketmq:5.3.2
+    #启动依赖
+    depends_on:
+      namesrv:
+        condition: service_started #nameserver容器启动成功
+      volume-init:
+        condition: service_completed_successfully #权限初始化执行成功
+    ports:
+      - "127.0.0.1:10909:10909" #VIP通道端口
+      - "127.0.0.1:10911:10911" #broker主要通信端口
+    environment:
+      NAMESRV_ADDR: namesrv:9876  #告诉broker去哪里注册自己
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m"  #依旧配置JVM堆大小
+    volumes:
+      - ./broker.conf:/etc/rocketmq/broker.conf:ro #将配置文件映射进容器
+      - broker-store:/home/rocketmq/store
+      - broker-logs:/home/rocketmq/logs
+    command: sh mqbroker -c /etc/rocketmq/broker.conf
+    restart: unless-stopped
+
+#声明有哪些命名卷
+volumes:
+  broker-store:
+  broker-logs:

@@ -1,3 +1,4 @@
+import { shopDetail, section, pageOf } from './fixtures/shopDetail'
 import { expect, test } from '@playwright/test'
 
 test('秒杀失败弹出后端信息，提示框在视口内且可以继续领取', async ({ page }, testInfo) => {
@@ -9,8 +10,8 @@ test('秒杀失败弹出后端信息，提示框在视口内且可以继续领�
       await route.continue()
       return
     }
-    const json = path === '/api/shop/42'
-      ? { code: 1, data: { id: 42, name: '测试门店', score: 48 } }
+    const json = path === '/api/shop/42/detail'
+      ? { code: 1, data: shopDetail({ id: 42, name: '测试门店' }, { vouchers: section(pageOf([{ id: 17, title: '限时券', type: 1, stock: 1, payValue: 100, actualValue: 200 }])) }) }
       : path === '/api/voucher/list/42'
         ? { code: 1, data: [{ id: 17, title: '限时券', type: 1, stock: 1, payValue: 100, actualValue: 200 }] }
         : path === '/api/voucher-order/seckill/17'

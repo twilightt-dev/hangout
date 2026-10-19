@@ -20,10 +20,19 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 通过公开入口验证当前模块的业务约束和执行边界。
+ */
 class TaskChainConfigurationTest {
+    /**
+     * Spring 测试上下文启动器。
+     */
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(TaskChainConfiguration.class);
 
+    /**
+     * 验证注解省略展示元数据时的名称和描述默认行为。
+     */
     @Test
     void omittedAnnotationNameUsesNodeIdAndEmptyDescription() {
         runner.withBean(DefaultNameNode.class).run(context -> {
@@ -38,13 +47,24 @@ class TaskChainConfigurationTest {
         });
     }
 
+    /**
+     * 测试使用的任务处理器或容器装配对象。
+     */
     @TaskNode(nodeId = "unnamed", group = "shop", phase = ProcessPhase.DATA_PROCESSING, taskType = TaskType.CPU_BOUND)
     static class DefaultNameNode implements TaskNodeHandler<Integer, String> {
+        /**
+         * 执行当前节点，只通过节点上下文提交结果；失败或超时的写集由引擎丢弃。
+         *
+         * @param context 当前调用独立使用的任务上下文
+         */
         @Override public void execute(TaskContext<Integer, String> context) {
             context.setOutput("店铺-" + context.getInput());
         }
     }
 
+    /**
+     * 验证工作线程不会隐式继承请求线程身份。
+     */
     @Test
     void workerThreadsDoNotImplicitlyInheritCallerIdentity() {
         var identity = new InheritableThreadLocal<String>();
@@ -59,6 +79,9 @@ class TaskChainConfigurationTest {
         } finally { identity.remove(); }
     }
 
+    /**
+     * 验证空节点集合不影响启动，但调用未知组时失败。
+     */
     @Test
     void emptyNodeSetAllowsStartupButUnknownGroupFailsAtInvocation() {
         runner.run(context -> {
@@ -69,12 +92,20 @@ class TaskChainConfigurationTest {
         });
     }
 
+    /**
+     * 验证同组节点重复在启动期间直接失败。
+     */
     @Test
     void duplicateNodeIdsFailDuringStartup() {
         runner.withUserConfiguration(Nodes.class).withBean("duplicate", ShopNode.class, ShopNode::new)
                 .run(context -> assertNotNull(context.getStartupFailure()));
     }
 
+    /**
+     * 验证非法线程池和预算配置导致启动失败。
+     *
+     * @param property 测试业务上下文使用的属性名称
+     */
     @ParameterizedTest
     @ValueSource(strings = {"taskchain.cpu-threads=0", "taskchain.io-threads=-1", "taskchain.queue-capacity=0",
             "taskchain.default-phase-timeout=0ms", "taskchain.shutdown-timeout=-1s",
@@ -83,6 +114,9 @@ class TaskChainConfigurationTest {
         runner.withPropertyValues(property).run(context -> assertNotNull(context.getStartupFailure()));
     }
 
+    /**
+     * 验证双线程池有界、具备名称且拒绝任务不在调用线程执行。
+     */
     @Test
     void bothPoolsAreBoundedNamedAndRejectWithoutRunningOnCaller() {
         runner.withPropertyValues("taskchain.cpu-threads=1", "taskchain.io-threads=1", "taskchain.queue-capacity=1")
@@ -112,6 +146,9 @@ class TaskChainConfigurationTest {
                 });
     }
 
+    /**
+     * 验证两个线程池共享关闭预算，超时后尝试取消。
+     */
     @Test
     void poolsShareOneShutdownBudgetAndAttemptCancellationAfterIt() {
         runner.withPropertyValues("taskchain.cpu-threads=1", "taskchain.io-threads=1", "taskchain.shutdown-timeout=600ms")
@@ -146,6 +183,9 @@ class TaskChainConfigurationTest {
                 });
     }
 
+    /**
+     * 验证默认线程池与预算符合确认的开发配置。
+     */
     @Test
     void defaultsMatchApprovedDevelopmentValues() {
         runner.run(context -> {
@@ -159,6 +199,11 @@ class TaskChainConfigurationTest {
         });
     }
 
+    /**
+     * 模拟无法立即中断的外部任务，用于验证迟到写入隔离。
+     *
+     * @param latch 协调测试线程执行时机的计数门闩
+     */
     private static void awaitIgnoringInterrupts(CountDownLatch latch) {
         boolean interrupted = false;
         for (;;) {
@@ -168,6 +213,9 @@ class TaskChainConfigurationTest {
         if (interrupted) Thread.currentThread().interrupt();
     }
 
+    /**
+     * 验证从目标类型发现注解，但实际调用容器中的代理处理器。
+     */
     @Test
     void discoversTargetAnnotationButInvokesActualJdkProxyBean() {
         runner.withUserConfiguration(ProxyNodes.class).run(context -> {
@@ -186,8 +234,16 @@ class TaskChainConfigurationTest {
         });
     }
 
+    /**
+     * 测试使用的任务处理器或容器装配对象。
+     */
     @Configuration(proxyBeanMethods = false)
     static class ProxyNodes {
+        /**
+         * 创建用于验证代理注解发现的测试处理器。
+         *
+         * @return 用于验证代理发现与调用的任务处理器
+         */
         @Bean
         @SuppressWarnings("unchecked")
         TaskNodeHandler<Integer, String> proxiedNode() {
@@ -201,6 +257,9 @@ class TaskChainConfigurationTest {
         }
     }
 
+    /**
+     * 验证注解节点被发现、注册表冻结及默认链路可执行。
+     */
     @Test
     void discoversAnnotatedBeansFreezesRegistryAndRunsDefaultChain() {
         runner.withUserConfiguration(Nodes.class).run(context -> {
@@ -213,14 +272,30 @@ class TaskChainConfigurationTest {
         });
     }
 
+    /**
+     * 测试使用的任务处理器或容器装配对象。
+     */
     @Configuration(proxyBeanMethods = false)
     static class Nodes {
+        /**
+         * 创建商详业务上下文测试节点。
+         *
+         * @return 测试用商详处理器
+         */
         @Bean ShopNode shopNode() { return new ShopNode(); }
     }
 
+    /**
+     * 测试使用的任务处理器或容器装配对象。
+     */
     @TaskNode(nodeId = "shop", nodeName = "加载店铺基础信息", description = "根据店铺编号生成示例详情",
             group = "shop", phase = ProcessPhase.DATA_PROCESSING, taskType = TaskType.CPU_BOUND)
     static class ShopNode implements TaskNodeHandler<Integer, String> {
+        /**
+         * 执行当前节点，只通过节点上下文提交结果；失败或超时的写集由引擎丢弃。
+         *
+         * @param context 当前调用独立使用的任务上下文
+         */
         @Override public void execute(TaskContext<Integer, String> context) {
             context.setOutput("店铺-" + context.getInput());
         }

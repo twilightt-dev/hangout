@@ -52,6 +52,11 @@ class ArchitectureLayoutTest {
                 if (dependency.getElementsByTagName("scope").getLength() > 0
                         && "test".equals(dependency.getElementsByTagName("scope").item(0).getTextContent())) continue;
                 String artifact = dependency.getElementsByTagName("artifactId").item(0).getTextContent();
+                // 领域层仅允许 Lombok 编译期例外，不能借 provided 范围引入运行框架。
+                if (module.equals("domain") && artifact.equals("lombok")
+                        && dependency.getElementsByTagName("groupId").item(0).getTextContent().equals("org.projectlombok")
+                        && dependency.getElementsByTagName("scope").getLength() > 0
+                        && dependency.getElementsByTagName("scope").item(0).getTextContent().equals("provided")) continue;
                 assertEquals("application", module, "领域模块不能声明生产依赖：" + artifact);
                 assertTrue(Set.of("domain", "spring-context", "spring-tx").contains(artifact),
                         "应用层不能依赖遗留层或技术适配：" + artifact);

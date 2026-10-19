@@ -4,7 +4,7 @@ import { createAppRouter, routes } from './index'
 
 describe('应用路由契约', () => {
   it('包含完整命名路由表与保护元数据', () => {
-    const expected = ['home', 'login', 'password-login', 'register', 'shops', 'shop-detail', 'blog-detail', 'publish', 'me', 'edit-profile', 'user-profile', 'not-found']
+    const expected = ['shop-section-list', 'home', 'login', 'password-login', 'register', 'shops', 'shop-detail', 'blog-detail', 'publish', 'me', 'edit-profile', 'user-profile', 'not-found']
     expect(routes.map((route) => route.name)).toEqual(expected)
     expect(routes.filter((route) => route.meta?.requiresAuth).map((route) => route.name)).toEqual(['publish', 'me', 'edit-profile'])
   })

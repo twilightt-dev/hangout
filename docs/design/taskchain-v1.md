@@ -48,11 +48,11 @@ infrastructure 使用 com.dianping.shared.taskchain.config，提供 TaskChainCon
     }
 
     // TaskChainEngine 的公开方法签名。
-    public <I, O> TaskContext<I, O> executeChain(
-            String group, TaskContext<I, O> context);
+    public <I, O, C extends TaskContext<I, O>> C executeChain(
+            String group, C context);
 
-    public <I, O> TaskContext<I, O> executePhaseChain(
-            String group, TaskContext<I, O> context,
+    public <I, O, C extends TaskContext<I, O>> C executePhaseChain(
+            String group, C context,
             List<PhaseConfig> phaseConfigs);
 
 executeChain 按五阶段默认顺序、全部串行执行。executePhaseChain 按传入配置列表顺序执行，不再按枚举排序改变顺序。阶段结果、节点报告和链路状态由内核汇总；节点可抛异常或标记自身失败，但不能修改其他节点或整条链路的诊断集合。
@@ -75,6 +75,8 @@ executeChain 按五阶段默认顺序、全部串行执行。executePhaseChain �
 | Context 生命周期 | 每次执行独立创建，禁止并发复用和再次执行；返回后报告固定，不接受迟到回写 |
 
 阶段提交仅约束 Context 数据，不提供外部副作用回滚。节点也必须遵守输入只读约定，否则隔离容器无法阻止对象级别修改。
+
+2026-10-19 增补业务上下文继承：TaskContext 不再是 final 类，业务子类通过 protected TaskContext(parent, snapshot) 构造节点实例并覆盖 createNodeContext(snapshot)，引擎返回参数对应的子类类型。节点必须与根上下文类型、输入、执行身份及传入快照一致，必须为未分配的新节点；工厂不得复用节点或返回主上下文。基础读写与生命周期方法为 final；业务属性访问委托 getAttribute/setAttribute，不使用独立可变字段保存待合并结果。工厂 RuntimeException 转为节点失败报告，按必需/可选语义收尾。
 
 ## 5. 失败与超时
 

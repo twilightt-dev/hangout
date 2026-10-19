@@ -8,6 +8,7 @@
 
 每次开发完成后在前端目录执行npm run build，并把构建产物放到D:\devprojects\java-projects\comment\nginx-1.18.0\html\hmdp目录下
 
+每次编写完代码之后，在代码上加上javadoc风格的文档注释，方便我CR
 
 
 ## 项目的文档分层
@@ -45,9 +46,9 @@
 
 ## CONTEXT.md 维护规则
 
-- 开始设计新模块前，先读取根目录和对应模块的 `CONTEXT.md`。
+- 开始设计新模块前，先读取根目录和对应模块的 `docs/CONTEXT.md`。
 - 使用 `grill-with-docs` 后，只把已经确认的设计结论写入文档。
-- 不要把完整聊天记录写入 `CONTEXT.md`。
+- 不要把完整聊天记录写入 `docs/CONTEXT.md`。
 - 每个模块必须说明：
   - 模块目标
   - 负责范围
@@ -59,9 +60,9 @@
   - 业务约束
   - 已确认的设计
   - 未决问题
-- 重要的架构取舍必须单独创建 ADR，并在 `CONTEXT.md` 中建立链接。
+- 重要的架构取舍必须单独创建 ADR，并在 `docs/CONTEXT.md` 中建立链接。
 - 未确认的内容必须标记为“未决问题”，不能伪装成最终设计。
-- 修改模块设计后，同时更新对应的 `CONTEXT.md`。
+- 修改模块设计后，同时更新对应的 `docs/CONTEXT.md`。
 
 ## Agent 技能
 
@@ -75,4 +76,4 @@
 
 ### Domain 文档
 
-本仓库采用单上下文布局，使用根目录的 `CONTEXT.md` 和 `docs/adr/`。详见 `docs/agents/domain.md`。
+本仓库采用单上下文布局，使用根目录的 `docs/CONTEXT.md` 和 `docs/adr/`。详见 `docs/agents/domain.md`。

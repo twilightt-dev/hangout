@@ -32,6 +32,10 @@ public class RedisConstants {
 
     //商铺缓存key
     public static final String SHOP_CACHE_KEY = "cache:shop:";
+    /** 公共商详快照键前缀。 */
+    public static final String SHOP_DETAIL_CACHE_KEY = "cache:shop-detail:";
+    /** 公共商详重建锁键前缀。 */
+    public static final String SHOP_DETAIL_CACHE_LOCK_KEY = "lock:shop-detail:";
     //商铺逻辑缓存key
     public static final String SHOP_LOGICAL_CACHE_KEY = "cache:shop:logic" ;
     //商铺类型列表缓存key

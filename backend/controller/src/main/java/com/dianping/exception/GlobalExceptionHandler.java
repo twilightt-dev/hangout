@@ -17,10 +17,24 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import com.dianping.shopdetail.exception.ShopReviewException;
 import com.dianping.shopdetail.exception.ShopSetmealException;
+import com.dianping.shopdetail.exception.ShopReviewException;
+import com.dianping.shopdetail.exception.ShopSetmealException;
+import com.dianping.shopdetail.exception.RecommendDishException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(com.dianping.shopdetail.exception.ShopDetailException.class)
+    public ResponseEntity<Result<Void>> handleShopDetailException(com.dianping.shopdetail.exception.ShopDetailException exception) {
+        if (exception.status() >= 500) log.warn("商详查询失败", exception);
+        return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
+    }
+
+    @ExceptionHandler(RecommendDishException.class)
+    public ResponseEntity<Result<Void>> handleRecommendDishException(RecommendDishException exception) {
+        return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Result<Void>> handleResponseStatusException(ResponseStatusException exception) {
