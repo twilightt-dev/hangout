@@ -350,6 +350,10 @@ TaskNodeHandler.execute(context) 定义节点处理契约；TaskChainEngine.exec
 
 ## 商详首次展示聚合（已实现，待真实环境验收）
 
+application 按用户确认采用 `com.dianping.shop` 总包，分为 `recommend`、`review`、`setmeal`、`shopdetail` 业务包；共享分页请求和响应放入 `shop.shared.request`、`shop.shared.result`。任务节点只属于 `shopdetail.task`，领域模型和仓储接口不因应用层分包调整。具体结构见[商详模块上下文](docs/modules/shopdetail/context.md#应用层业务分包)。
+
+2026-10-19 按用户反馈调整职责：ShopDetailDomainService 按教学项目形式直接调用仓储、逐项赋值并增强业务数据；领域组合不包装任务执行状态。应用服务选择同步或任务链路径、检查执行状态并转换响应，任务链分项状态留在上下文与现有 SectionResult 中。ShopDetailQueryService 仅保留独立查看更多用例；多语句仓储读取负责自己的只读事务。详见[商详模块上下文](docs/modules/shopdetail/context.md)。
+
 2026-10-19 第 1～21 项选择已确认：本轮完成六区聚合接口、前端接入和必要独立分页；DATA_PROCESSING 并行查询默认 2 秒，POST_PROCESSING 串行组装与增强共享默认 1 秒，Assemble 必需、Enrich 可选。统一首屏少量数据与独立分页，套餐改为首屏最多 4 个而非全部返回；近期口碑标签采用评价与博客固定词典规则，周边以当前店铺为中心推荐同类型 5 公里内店铺。缓存和预热后移，详细约束及最终核对状态见[商详模块上下文](docs/modules/shopdetail/context.md)。用户已授权实施，上述代码与页面均已实现；套餐接口 data 已改为分页对象，调用方同步更新。验证与部署边界见[实施记录](docs/modules/shopdetail/implementation.md)，不自动执行 Git 提交或真实数据库操作。
 
 ## 店铺评价（第一版已实现，迁移脚本待部署）

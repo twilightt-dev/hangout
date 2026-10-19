@@ -57,17 +57,51 @@
 
 | 模型 | 职责与现状 |
 |---|---|
-| ShopDetailAggregate | 领域层的商详业务组合模型，保留现有名称；应用层转换为 model.result 中的 HTTP 业务响应数据 |
+| ShopDetailAggregate | 普通业务数据组合，直接保存各仓储查询结果、推荐关系与衍生数据，不包装任务执行状态 |
 | ShopDetailTaskContext | 继承 TaskContext<Long, ShopDetailAggregate>，承载输入、节点数据与输出 |
 | ShopVoucher、ShopSetmeal、RecommendDish | 优惠券、套餐和推荐菜；已有独立业务规则继续生效 |
 | ShopReview、ShopReviewSummary | 评价明细与统计摘要，数量和均分基于全部评价，近期标签采用下文约定样本与规则 |
 | ShopVisitBlog | 关联当前店铺的探店笔记及展示资料 |
 | ShopRelatedShop | 周边推荐店铺及其相对当前店铺的距离 |
-| ShopDetailDomainService | 封装标签与周边推荐等跨对象规则，不负责引擎编排或 HTTP 返回包装 |
+| ShopDetailDomainService | 统一组合仓储读取、同步聚合与 enrichShopDetail 增强，封装标签、周边推荐等跨对象规则；不负责引擎编排或 HTTP 返回包装 |
 
 页面分区不直接决定实体或聚合边界。基本信息区不因是独立展示区域而必然新增领域实体。
 
 domain 定义业务模型、仓储接口和领域规则；application 负责节点与用例编排，在 model.result 定义响应模型；infrastructure 实现查询；Facade 转调应用服务；Controller 处理 HTTP 和可信身份。沿用项目 Result 外壳，业务结果类型不直接依赖旧 service 模块模型。
+
+### 应用层业务分包
+
+用户确认 application 以 `com.dianping.shop` 为总包，先按业务归类，再按请求、响应和用例职责分包：
+
+| 包 | 负责范围 |
+|---|---|
+| `recommend.model.request`、`recommend.model.result`、`recommend.service` | 推荐菜投稿、用户推荐及独立分页 |
+| `review.model.request`、`review.model.result`、`review.service` | 店铺评价发布、独立分页及预设标签 |
+| `setmeal.model.result`、`setmeal.service` | 套餐响应与独立查询；分页条件使用共享请求，没有专用请求时不创建空包 |
+| `shopdetail.model.result`、`shopdetail.service` | 首屏聚合响应、分项执行状态、任务链入口与商详其他查看更多查询 |
+| `shopdetail.task` | 商详业务上下文、查询节点、组装和增强节点；当前仅该业务使用任务编排 |
+| `shared.request.ShopListPageRequest` | 店铺列表共享分页条件，校验店铺标识、页码、每页数量与偏移量溢出 |
+| `shared.result.ShopPageResult<T>` | 店铺各业务共享的应用层分页响应，承载记录、总数、页码、每页数量和总页数 |
+
+`ShopDetailResult` 保留在 `com.dianping.shop.shopdetail.model.result`，表达整页首次展示的聚合响应；`SectionResult` 也保留在该包维护商详分项状态。原 `ShopDetailPageRequest` 更名并迁移为共享的 `ShopListPageRequest`；首屏入口只校验店铺标识，不构造分页请求。已有推荐菜和评价的专用分页响应继续保留，避免此次分包重构改变接口契约。
+
+本次仅调整 application 的业务分包，domain、infrastructure、Facade 和 Controller 的类归属保持原有设计，并同步引用新应用层类型。`shared` 属于 application 内店铺业务共享模型，不代表新增共享领域。HTTP 路径、JSON 字段与任务链节点元数据不因分包改变。
+
+2026-10-19 用户明确要求按教学项目简化商详应用服务，职责进一步统一为：
+
+| 入口或组件 | 负责范围 |
+|---|---|
+| ShopDetailDomainService.getShopDetail | 按教学项目形式直接调用仓储并逐项赋值，最后调用 enrichShopDetail；查询异常向上抛出，不强求同步路径也逐区降级 |
+| ShopDetailDomainService.enrichShopDetail | 直接读取近期语料、生成口碑和评价标签、查询周边店铺并补齐组合对象；不包装任务执行状态 |
+| ShopDetailApplicationService.getShopDetail | 校验请求，选择同步领域聚合或任务链，检查执行成功与否并转换响应；不承担优惠、标签、周边等业务推导 |
+| 查询节点、Assemble、Enrich | 查询节点复用领域读取能力；Assemble 汇集业务数据；Enrich 调用领域能力并分别记录来源故障。上下文在引擎结束后补齐未提交分项的失败或超时状态 |
+| ShopDetailResult.from | 将普通领域数据与应用执行状态合成响应，不查询仓储、不生成业务衍生结果；同步成功结果按实际数据判断空结果 |
+| ShopDetailQueryService | 只承接优惠券、博客与周边的独立查看更多用例，不参与首屏任务链，不再集中持有所有仓储 |
+| 仓储实现 | 多语句分页、套餐明细和评价统计在调用线程内开启独立只读、可重复读事务，保证单次读取内部一致；原有写用例事务不变 |
+
+只有未装配 TaskChainEngine 时采用同步路径；已经开始执行的链路失败按既有 404、503、504 等契约返回，不串行重试整条链路。同步路径不承诺引擎阶段预算，生产仍使用已装配的任务链。
+
+2026-10-19 用户进一步明确采用教学项目的直接查询形式，取消领域分项包装。此前领域 ShopDetailSection 的方案被本决定替代：领域组合只保存业务数据；任务链的成功、失败、超时和部分来源可用等状态由 application 的上下文与现有 SectionResult 维护。同步查询任一仓储故障将向上抛出，由应用入口统一转换异常。任务链路径继续保留局部降级；两条路径仅要求成功时业务结果与规则一致。
 
 domain 保留已有 Lombok provided 依赖；开发时调整架构测试，仅允许此编译期依赖例外，仍禁止领域层依赖 Spring、数据库框架和旧 service 模块。ArchitectureLayoutTest 已按这一边界调整，Lombok 仅作为编译期例外。
 
@@ -155,8 +189,8 @@ domain 保留已有 Lombok provided 依赖；开发时调整架构测试，仅�
 
 | 模块 | 入口与职责 |
 |---|---|
-| domain | ShopBaseInfo 保存店铺自身资料；ShopDetailAggregate 组合业务结果；领域服务维护跨来源标签与周边规则 |
-| application | ShopDetailApplicationService 编排任务链和转换响应；ShopDetailQueryService 管理独立只读事务；task 下六个查询、Assemble、Enrich |
+| domain | ShopBaseInfo 保存店铺自身资料；ShopDetailAggregate 直接组合业务数据；领域服务统一同步联合查询、标签及周边业务规则 |
+| application | ShopDetailApplicationService 选择领域同步入口或编排任务链；ShopDetailQueryService 承接独立分页与响应转换；task 下六个查询、Assemble、Enrich，不维护跨对象业务推导规则 |
 | infrastructure | JDBC/MyBatis 直接读取业务表；博客个人点赞状态读取现有 Redis 集合；不调用旧 Service |
 | facade / controller | 转调应用用例；Controller 取得可信 UserDTO 身份并显式传入，沿用 Result 响应外壳 |
 | frontend | ShopDetailView 接收一次聚合结果；ShopSectionListView 从第 1 页独立查询；写操作走已有接口并刷新对应列表 |
@@ -171,7 +205,7 @@ domain 保留已有 Lombok provided 依赖；开发时调整架构测试，仅�
 
 区域统一使用 status、data、message。SUCCESS / EMPTY / PARTIAL 是可用结果，FAILED / TIMED_OUT / UNAVAILABLE 没有伪造数据。整体非法参数返回 400、店铺不存在 404、必需任务超时 504、其他必需依赖故障 503；单个可选任务故障保持 HTTP 200，并在对应区域表达状态。优惠券 availability 为 AVAILABLE、UPCOMING 或 SOLD_OUT。
 
-语料读取在可选 Enrich 内独立执行，避免语料阻塞导致已查询的评价和博客列表被整个查询节点丢弃。每个节点按写集整体提交；Enrich 整体超时时，其标签和周边增量均丢弃，保留 Assemble 的输出。可选节点内部的分项异常以 SectionResult 和服务端日志表达，节点引擎报告不替代业务区域状态。
+语料读取由可选 Enrich 调用领域能力完成，避免语料阻塞导致已查询的评价和博客列表被整个查询节点丢弃。每个节点按写集整体提交；Enrich 整体超时时，其标签和周边增量均丢弃，保留 Assemble 的输出。分项异常使用 application 的 SectionResult 及上下文表达，领域模型不保存执行状态。领域组合允许 setter 赋值，但任务节点必须先复制组合对象再修改，不能原地修改已经发布的输出。
 
 每个公开分页读取在自己的只读可重复读事务内取得计数和列表；各查询节点之间不共享数据库事务，也不承诺整页或跨分页请求的同一数据库快照。上下文隔离不会深复制业务对象，节点遵守已发布值只读、通过新对象替换的协议。
 

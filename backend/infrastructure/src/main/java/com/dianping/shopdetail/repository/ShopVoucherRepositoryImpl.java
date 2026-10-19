@@ -2,13 +2,34 @@ package com.dianping.shopdetail.repository;
 import com.dianping.shopdetail.model.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.*;
 import java.time.LocalDateTime;
 
-/** 普通券与秒杀券共用稳定排序，库存与时间只用于展示状态。 */
+/**
+ * 普通券与秒杀券共用稳定排序，库存与时间只用于展示状态。
+ */
 @Repository
 public class ShopVoucherRepositoryImpl implements ShopVoucherRepository {
+    /**
+     * 关系数据库查询模板。
+     */
     private final JdbcTemplate jdbc;
+    /**
+     * 创建 ShopVoucherRepositoryImpl，初始化所需依赖及实例状态。
+     *
+     * @param jdbc 关系数据库查询模板
+     */
     public ShopVoucherRepositoryImpl(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    /**
+     * 分页读取当前店铺的业务记录，返回有序明细及总数。
+     *
+     * @param shopId 店铺标识
+     * @param current 从 1 开始的页码
+     * @param size 每页数量
+     * @param now 本次读取或创建使用的时间基准
+     * @return 当前页结果；无匹配数据时为空记录集合
+     */
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW, isolation = Isolation.REPEATABLE_READ)
     public ShopPage<ShopVoucher> page(Long shopId, long current, int size, LocalDateTime now) {
         String from = """
                 FROM tb_voucher v LEFT JOIN tb_seckill_voucher s ON s.voucher_id=v.id

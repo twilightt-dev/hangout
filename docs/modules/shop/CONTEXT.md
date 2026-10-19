@@ -4,6 +4,8 @@
 
 2026-10-19 用户指定：后续商详首次展示聚合、六区展示与任务链接入的设计统一维护在[商详模块上下文](../shopdetail/context.md)。本文已有商详章节作为历史记录保留，后续商详设计以新文档为准；评价、套餐和推荐菜的独立业务仍在本文维护。
 
+应用层已按用户确认的结构统一归入 `com.dianping.shop`：推荐菜使用 `recommend`，店铺评价使用 `review`，套餐使用 `setmeal`，商详聚合使用 `shopdetail`；各业务内部维护对应的 `model.request`、`model.result` 和 `service`，只在商详下维护任务节点。通用分页请求与响应分别为 `shared.request.ShopListPageRequest` 和 `shared.result.ShopPageResult<T>`。domain 与 infrastructure 本次不重新分包，独立业务规则和 HTTP 契约保持不变，完整归属见[商详应用层分包](../shopdetail/context.md#应用层业务分包)。
+
 | 业务 | 当前状态 | 详细记录 |
 |---|---|---|
 | [店铺评价](#店铺评价) | 第一版已实现，迁移脚本待部署 | [设计](shopreview-design.md)、[实施计划](shopreview-plan.md) |

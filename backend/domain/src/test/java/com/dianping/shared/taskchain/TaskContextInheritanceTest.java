@@ -19,8 +19,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 业务子类必须在真实引擎执行中保留类型，并沿用局部写入及阶段提交语义。 */
+/**
+ * 业务子类必须在真实引擎执行中保留类型，并沿用局部写入及阶段提交语义。
+ */
 class TaskContextInheritanceTest {
+    /**
+     * 验证节点保留业务上下文子类型且串行属性能合并回根。
+     */
     @Test
     void serialNodesReceiveBusinessSubtypeAndPassBusinessPropertiesToTheRoot() {
         var first = new AtomicReference<BusinessContext>();
@@ -51,6 +56,9 @@ class TaskContextInheritanceTest {
         }
     }
 
+    /**
+     * 验证业务子上下文并行读取一致快照并合并不同属性。
+     */
     @Test
     void parallelBusinessContextsReadTheSameSnapshotAndMergeDistinctProperties() {
         var written = new CountDownLatch(1);
@@ -82,6 +90,9 @@ class TaskContextInheritanceTest {
         }
     }
 
+    /**
+     * 验证业务属性并行冲突拒绝整个阶段提交。
+     */
     @Test
     void parallelBusinessPropertyConflictRejectsTheWholeStage() {
         var registry = new TaskNodeRegistry();
@@ -99,6 +110,9 @@ class TaskContextInheritanceTest {
         }
     }
 
+    /**
+     * 验证失败业务节点的属性不会泄漏给后续节点。
+     */
     @Test
     void failedBusinessNodeCannotLeakItsPropertiesIntoTheNextNode() {
         var registry = new TaskNodeRegistry();
@@ -118,6 +132,11 @@ class TaskContextInheritanceTest {
         }
     }
 
+    /**
+     * 验证无效业务子类型工厂转为节点失败报告。
+     *
+     * @param required 是否为失败后阻断链路的必需节点
+     */
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void invalidSubtypeFactoryIsReportedAsNodeFailure(boolean required) {
@@ -135,6 +154,9 @@ class TaskContextInheritanceTest {
         }
     }
 
+    /**
+     * 验证节点工厂不能跨执行返回上下文或复用节点视图。
+     */
     @Test
     void nodeFactoryCannotReturnAnotherExecutionOrReuseANode() {
         class InvalidContext extends TaskContext<Long, String> {
@@ -157,22 +179,81 @@ class TaskContextInheritanceTest {
         assertThrows(IllegalStateException.class, () -> execution.nodeContext(snapshot));
     }
 
+    /**
+     * 创建带指定元数据的测试任务节点。
+     *
+     * @param id 记录标识
+     * @param order 阶段内排序值；数值越小越先执行
+     * @param required 是否为失败后阻断链路的必需节点
+     * @param handler 实际执行节点业务的处理器
+     * @return 具有指定元数据及执行逻辑的测试节点
+     */
     private static TaskNodeHolder<Long, String> node(String id, int order, boolean required, TaskNodeHandler<Long, String> handler) {
         return new TaskNodeHolder<>(id, "shop", ProcessPhase.DATA_PROCESSING, order, TaskType.CPU_BOUND, required, handler);
     }
 
+    /**
+     * 创建测试用的并行阶段配置。
+     *
+     * @return 测试使用的并行阶段配置列表
+     */
     private static List<PhaseConfig> parallel() {
         return List.of(new PhaseConfig(ProcessPhase.DATA_PROCESSING, ExecutionMode.PARALLEL, Duration.ofSeconds(3)));
     }
 
+    /**
+     * 测试使用的业务上下文子类型。
+     */
     private static final class BusinessContext extends TaskContext<Long, String> {
+        /**
+         * 创建 BusinessContext，初始化所需依赖及实例状态。
+         *
+         * @param shopId 店铺标识
+         */
         BusinessContext(Long shopId) { super(shopId); }
+        /**
+         * 创建 BusinessContext，初始化所需依赖及实例状态。
+         *
+         * @param parent 创建当前节点视图的父上下文
+         * @param snapshot 节点可见或准备提交的数据快照
+         */
         private BusinessContext(BusinessContext parent, Snapshot<String> snapshot) { super(parent, snapshot); }
+        /**
+         * 基于引擎提供的快照创建同类型节点视图，业务属性继续通过父类写集传递。
+         *
+         * @param snapshot 节点可见或准备提交的数据快照
+         * @return 与根上下文具有相同业务类型的全新节点视图
+         */
         @Override protected BusinessContext createNodeContext(Snapshot<String> snapshot) { return new BusinessContext(this, snapshot); }
+        /**
+         * 取得本次商详查询的店铺标识。
+         *
+         * @return 本次查询的店铺标识
+         */
         Long getShopId() { return getInput(); }
+        /**
+         * 读取测试业务上下文中通过写集维护的属性。
+         *
+         * @return 当前视图可见的测试名称属性
+         */
         String getName() { return (String) getAttribute("name"); }
+        /**
+         * 通过上下文写集更新测试业务属性。
+         *
+         * @param name 名称
+         */
         void setName(String name) { setAttribute("name", name); }
+        /**
+         * 读取测试业务上下文中通过写集维护的属性。
+         *
+         * @return 当前视图可见的测试计数属性
+         */
         Integer getCount() { return (Integer) getAttribute("count"); }
+        /**
+         * 通过上下文写集更新测试业务属性。
+         *
+         * @param count 记录数量或测试计数值
+         */
         void setCount(Integer count) { setAttribute("count", count); }
     }
 }

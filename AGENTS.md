@@ -8,6 +8,7 @@
 
 每次开发完成后在前端目录执行npm run build，并把构建产物放到D:\devprojects\java-projects\comment\nginx-1.18.0\html\hmdp目录下
 
+每次编写完代码之后，在代码上加上javadoc风格的文档注释，方便我CR
 
 
 ## 项目的文档分层
