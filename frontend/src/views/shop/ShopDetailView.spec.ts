@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ShopDetailView from './ShopDetailView.vue'
 import { ApiError } from '@/api/http'
 
-const { getShop, getVouchers, seckillVoucher, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
-  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
+const { getShopSetmeals } = vi.hoisted(() => ({ getShopSetmeals: vi.fn() }))
+vi.mock('@/api/shopSetmeal', () => ({ getShopSetmeals }))
+
+const { getShop, getVouchers, seckillVoucher, getShopReviews, getReviewTags, publishShopReview, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
+  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), getShopReviews: vi.fn(), getReviewTags: vi.fn(), publishShopReview: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
 }))
 
 const route = reactive({ params: { id: '8' }, fullPath: '/shops/8' })
 vi.mock('@/api/shop', () => ({ getShop, getVouchers, seckillVoucher }))
+vi.mock('@/api/shopReview', () => ({ getShopReviews, getReviewTags, publishShopReview }))
 vi.mock('@/api/traffic', async (importOriginal) => ({ ...await importOriginal<typeof import('@/api/traffic')>(), sendVisit }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
 vi.mock('element-plus', () => ({ ElMessage: { error: messageError, success: vi.fn(), warning: vi.fn() } }))
@@ -30,8 +34,27 @@ describe('ShopDetailView', () => {
     route.params.id = '8'; route.fullPath = '/shops/8'
     getShop.mockReset().mockResolvedValue({ id: 8, name: '巷口咖啡' })
     getVouchers.mockReset().mockResolvedValue([])
+    getShopSetmeals.mockReset().mockResolvedValue([])
+    getShopReviews.mockReset().mockResolvedValue({ records: [], total: 0, current: 1, size: 10, pages: 0, averageScore: 4.8 })
+    getReviewTags.mockReset().mockResolvedValue([])
+    publishShopReview.mockReset().mockResolvedValue(1)
     seckillVoucher.mockReset().mockResolvedValue(99)
     push.mockReset(); messageError.mockReset(); authState.authenticated = false
+  })
+
+  it('套餐加载失败时仍展示商详、优惠券与评价，并支持区块内重试', async () => {
+    getShopSetmeals.mockRejectedValueOnce(new Error('offline')).mockResolvedValue([])
+    getVouchers.mockResolvedValue([{ id: 17, title: '限时券', type: 1, stock: 1 }])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('巷口咖啡')
+    expect(wrapper.find('.voucher-card').exists()).toBe(true)
+    expect(wrapper.text()).toContain('评价')
+    expect(wrapper.text()).toContain('套餐加载失败')
+    await wrapper.get('[data-test="setmeal-retry"]').trigger('click')
+    await flushPromises()
+    expect(getShopSetmeals).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).not.toContain('套餐加载失败')
   })
 
   it('成功展示后统计近似访客，切页取消旧统计且不接受旧结果', async () => {
