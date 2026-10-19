@@ -7,6 +7,10 @@ import com.dianping.config.SecurityConfig;
 import com.dianping.exception.GlobalExceptionHandler;
 import com.dianping.filter.JwtAuthenticationFilter;
 import jakarta.servlet.FilterChain;
+import java.sql.SQLException;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -14,11 +18,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.*;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
@@ -27,16 +31,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
-
-import javax.sql.DataSource;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
-import java.sql.SQLException;
-
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -71,10 +69,10 @@ class ShopSetmealIntegrationTest {
         mvc.perform(get("/shop/101/setmeals"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1))
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].name").value("双人餐"))
-                .andExpect(jsonPath("$.data[0].price").value(9900))
-                .andExpect(jsonPath("$.data[0].items[0].name").value("烤鱼"));
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].name").value("双人餐"))
+                .andExpect(jsonPath("$.data.records[0].price").value(9900))
+                .andExpect(jsonPath("$.data.records[0].items[0].name").value("烤鱼"));
     }
 
     @ParameterizedTest
@@ -89,7 +87,7 @@ class ShopSetmealIntegrationTest {
         jdbc.update("INSERT INTO tb_shop VALUES(102)");
         mvc.perform(get("/shop/102/setmeals"))
                 .andExpect(status().isOk())
-                .andExpect(content().json("{\"code\":1,\"data\":[]}"));
+                .andExpect(content().json("{\"code\":1,\"data\":{\"records\":[],\"total\":0}}"));
         mvc.perform(get("/shop/999/setmeals"))
                 .andExpect(status().isNotFound());
     }
@@ -127,6 +125,20 @@ class ShopSetmealIntegrationTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value(0));
     }
+    @Test
+    void pagesPublishedMealsWithItemsAndStableTieOrder() throws Exception {
+        jdbc.update("INSERT INTO tb_shop VALUES(301)");
+        for (long id=301;id<=303;id++) {
+            jdbc.update("INSERT INTO tb_shop_setmeal(id,shop_id,name,cover_image,price,people,rules,status,sort) VALUES(?,301,'套餐','/meal.png',9900,2,'规则',1,0)",id);
+            jdbc.update("INSERT INTO tb_shop_setmeal_item(id,setmeal_id,name,quantity,unit,sort) VALUES(?,?,'主菜',1,'份',0)",id,id);
+        }
+        mvc.perform(get("/shop/301/setmeals").param("size","2").param("current","2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(3))
+                .andExpect(jsonPath("$.data.pages").value(2))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(303))
+                .andExpect(jsonPath("$.data.records[0].items[0].name").value("主菜"));
+    }
 
     @Test
     void repositoryFiltersByShopAndStatusAndKeepsStableSetmealAndItemOrder() {
@@ -147,7 +159,7 @@ class ShopSetmealIntegrationTest {
     @Import({MapperConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class})
     @ComponentScan(basePackages = "com.dianping", useDefaultFilters = false,
             includeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
-                    pattern = "com\\.dianping\\.(controller\\.ShopSetmealController|shopdetail\\..*ShopSetmeal(FacadeImpl|ApplicationService|RepositoryImpl))"))
+                    pattern = "com\\.dianping\\.(controller\\.ShopSetmealController|(shopdetail\\..*ShopSetmeal(FacadeImpl|RepositoryImpl)|shop\\.setmeal\\.service\\.ShopSetmealApplicationService))"))
     static class Config {
         @Bean DataSource dataSource() {
             return new DriverManagerDataSource("jdbc:h2:mem:setmeal_" + UUID.randomUUID()

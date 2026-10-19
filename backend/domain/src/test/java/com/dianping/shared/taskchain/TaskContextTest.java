@@ -10,7 +10,13 @@ import java.util.*;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 通过公开入口验证当前模块的业务约束和执行边界。
+ */
 class TaskContextTest {
+    /**
+     * 验证属性及报告容器为只读快照。
+     */
     @Test
     void visibleAttributesAndReportsAreReadOnlyContainerSnapshots() {
         var input = new HashMap<String, String>();
@@ -36,6 +42,9 @@ class TaskContextTest {
         }
     }
 
+    /**
+     * 验证输入输出和属性集合保留实际业务类型。
+     */
     @Test
     void concreteCollectionInputsOutputsAndAttributeValuesKeepTheirDeclaredTypes() {
         var input = new HashMap<String, String>();
@@ -62,6 +71,11 @@ class TaskContextTest {
         }
     }
 
+    /**
+     * 验证同一上下文不能并发启动或重复执行。
+     *
+     * @throws Exception 测试请求、并发等待或隔离环境初始化失败
+     */
     @Test
     void oneContextCannotRunConcurrentlyOrBeExecutedAgain() throws Exception {
         var started = new CountDownLatch(1);
@@ -84,6 +98,9 @@ class TaskContextTest {
         }
     }
 
+    /**
+     * 验证显式节点失败丢弃局部写入，可选失败不污染主错误。
+     */
     @Test
     void explicitNodeFailureDiscardsLocalWritesWithoutPoisoningOptionalChain() {
         var cause = new IllegalArgumentException("主动标记失败");

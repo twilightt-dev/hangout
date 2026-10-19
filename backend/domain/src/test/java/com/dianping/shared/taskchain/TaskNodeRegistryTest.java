@@ -12,7 +12,15 @@ import java.util.*;
 import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 通过公开入口验证当前模块的业务约束和执行边界。
+ */
 class TaskNodeRegistryTest {
+    /**
+     * 验证省略展示名时注册信息和失败报告都回退为节点标识。
+     *
+     * @param name 名称
+     */
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {" \t"})
@@ -34,6 +42,9 @@ class TaskNodeRegistryTest {
         }
     }
 
+    /**
+     * 验证同组节点标识唯一，冻结后顺序由排序值和标识稳定确定。
+     */
     @Test
     void idsAreUniqueWithinGroupAndOrderingIsStableAfterFreeze() {
         var registry = new TaskNodeRegistry();
@@ -53,6 +64,9 @@ class TaskNodeRegistryTest {
         assertThrows(NullPointerException.class, () -> registry.nodes("shop", null));
     }
 
+    /**
+     * 验证非法调用在节点执行与上下文领取前被拒绝。
+     */
     @Test
     void invalidInvocationsFailBeforeNodesRunOrContextIsClaimed() {
         var registry = new TaskNodeRegistry();
@@ -72,6 +86,9 @@ class TaskNodeRegistryTest {
         }
     }
 
+    /**
+     * 验证空注册表可以冻结，但未知组无法执行。
+     */
     @Test
     void emptyRegistryFreezesButUnknownGroupCannotExecute() {
         var registry = new TaskNodeRegistry();
@@ -80,6 +97,9 @@ class TaskNodeRegistryTest {
         assertThrows(IllegalArgumentException.class, () -> registry.nodes("unknown", ProcessPhase.DATA_PROCESSING));
     }
 
+    /**
+     * 验证节点元数据和阶段预算在构造时拒绝非法值。
+     */
     @Test
     void nodeMetadataAndPhaseBudgetsRejectInvalidValues() {
         assertThrows(IllegalArgumentException.class, () -> node(" ", "shop", 0));
@@ -90,6 +110,14 @@ class TaskNodeRegistryTest {
         assertThrows(NullPointerException.class, () -> new PhaseConfig(null, ExecutionMode.SERIAL, Duration.ofSeconds(1)));
     }
 
+    /**
+     * 创建带指定元数据的测试任务节点。
+     *
+     * @param id 记录标识
+     * @param group 任务组标识
+     * @param order 阶段内排序值；数值越小越先执行
+     * @return 具有指定元数据及执行逻辑的测试节点
+     */
     private TaskNodeHolder<Integer, String> node(String id, String group, int order) {
         return new TaskNodeHolder<>(id, group, ProcessPhase.DATA_PROCESSING, order, TaskType.CPU_BOUND, true,
                 context -> context.setOutput("正常"));

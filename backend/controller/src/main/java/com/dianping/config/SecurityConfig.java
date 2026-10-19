@@ -46,6 +46,8 @@ public class SecurityConfig {
                                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/shop/*/reviews").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/shop/*/recommend-dishes").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/shop/*/recommend-dishes/*/recommendation").authenticated()
                         .requestMatchers(
                                 "/user/login/code",
                                 "/user/register/code",

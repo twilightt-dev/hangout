@@ -1,3 +1,4 @@
+import { shopDetail } from './fixtures/shopDetail'
 import { expect, test, type Page } from '@playwright/test'
 
 type Visit = { kind: 'blog' | 'shop'; visitorId: string; eventId: string }
@@ -55,6 +56,9 @@ async function trafficApi(page: Page, options: TrafficOptions = {}) {
     else if (path === '/api/shop/15') {
       shopReads += 1
       data = { id: 15, name: '街角小馆', area: '滨江区', address: '江南大道 15 号', images: '', score: 46, comments: 18, openHours: '10:00—22:00' }
+    } else if (path === '/api/shop/15/detail') {
+      shopReads += 1
+      data = shopDetail({ id:15,name:'街角小馆',area:'滨江区',address:'江南大道 15 号',images:'',openHours:'10:00—22:00' })
     } else if (path === '/api/voucher/list/15') data = []
     else if (path === '/api/follow/status/2') data = false
     else if (path === '/api/user/me') data = { id: 1, nickName: '访问测试用户' }

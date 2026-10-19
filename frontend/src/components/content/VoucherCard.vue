@@ -2,7 +2,7 @@
   <article class="voucher-card" :class="{ 'voucher-card--seckill': isSeckill, 'voucher-card--disabled': disabled }">
     <div class="voucher-card__value"><small>¥</small>{{ formatPrice(voucher.payValue) }}<span>价值 ¥{{ formatPrice(voucher.actualValue) }}</span></div>
     <div class="voucher-card__body"><strong>{{ voucher.title || '到店优惠券' }}</strong><span v-if="voucher.subTitle">{{ voucher.subTitle }}</span><span>{{ timeText }}</span><span v-if="isSeckill">剩余 {{ voucher.stock ?? 0 }} 张</span></div>
-    <button type="button" class="voucher-card__claim" :disabled="disabled" @click="$emit('claim', voucher)">{{ loading ? '领取中…' : isSeckill ? '立即秒杀' : '领取优惠' }}</button>
+    <button type="button" class="voucher-card__claim" :disabled="disabled" @click="$emit('claim', voucher)">{{ loading ? '领取中…' : actionText }}</button>
   </article>
 </template>
 
@@ -14,7 +14,12 @@ const props = withDefaults(defineProps<{ voucher: Voucher; loading?: boolean }>(
 defineEmits<{ claim: [voucher: Voucher] }>()
 const isSeckill = computed(() => props.voucher.type === 1)
 const timeText = computed(() => props.voucher.beginTime && props.voucher.endTime ? `有效期：${props.voucher.beginTime} 至 ${props.voucher.endTime}` : props.voucher.rules || '使用规则以门店说明为准')
-const disabled = computed(() => props.loading || (isSeckill.value && (props.voucher.stock ?? 0) < 1))
+const actionText = computed(() => {
+  if (props.voucher.availability === 'UPCOMING') return '尚未开始'
+  if (props.voucher.availability === 'SOLD_OUT' || (isSeckill.value && (props.voucher.stock ?? 0) < 1)) return '已售罄'
+  return isSeckill.value ? '立即秒杀' : '到店咨询'
+})
+const disabled = computed(() => props.loading || ['UPCOMING', 'SOLD_OUT'].includes(props.voucher.availability || '') || (isSeckill.value && (props.voucher.stock ?? 0) < 1))
 </script>
 
 <style scoped>
