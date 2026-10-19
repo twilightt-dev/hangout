@@ -6,4 +6,5 @@ import java.util.List;
 /** 店铺套餐公开查询门面。 */
 public interface ShopSetmealFacade {
     List<ShopSetmealResult> list(Long shopId);
+    com.dianping.shopdetail.model.result.ShopPageResult<ShopSetmealResult> page(com.dianping.shopdetail.model.request.ShopDetailPageRequest request);
 }

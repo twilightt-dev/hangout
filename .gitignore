@@ -9,11 +9,20 @@ docs/*
 !docs/modules/
 docs/modules/*
 !docs/modules/shop/
+!docs/modules/shopdetail/
+docs/modules/shopdetail/*
+!docs/modules/shopdetail/context.md
+!docs/modules/shopdetail/implementation.md
 docs/modules/shop/*
 !docs/modules/shop/CONTEXT.md
 !docs/modules/shop/recommend-dish-implementation.md
+!docs/modules/shopdetail/
+docs/modules/shopdetail/*
+!docs/modules/shopdetail/context.md
+!docs/modules/shopdetail/implementation.md
 !docs/adr/
 docs/adr/*
+!docs/adr/0017-商详采用首次展示任务链与独立分页.md
 !docs/adr/0016-推荐菜采用独立菜品和用户推荐关系.md
 !docs/adr/0015-店铺套餐独立建表并通过DDD提供展示查询.md
 !docs/adr/0007-博客与店铺访问统计采用展示上报和近似访客计数.md
@@ -67,6 +76,7 @@ uploads/icons/*
 Thumbs.db
 
 # Local agent work products
+/.scratch/update_shopdetail_docs.py
 .superpowers/
 show-me-frontend-architecture.html
 /reference/0001-ddd-layer-map.html

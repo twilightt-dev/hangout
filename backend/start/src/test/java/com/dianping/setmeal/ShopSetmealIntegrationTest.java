@@ -71,10 +71,10 @@ class ShopSetmealIntegrationTest {
         mvc.perform(get("/shop/101/setmeals"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1))
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].name").value("双人餐"))
-                .andExpect(jsonPath("$.data[0].price").value(9900))
-                .andExpect(jsonPath("$.data[0].items[0].name").value("烤鱼"));
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].name").value("双人餐"))
+                .andExpect(jsonPath("$.data.records[0].price").value(9900))
+                .andExpect(jsonPath("$.data.records[0].items[0].name").value("烤鱼"));
     }
 
     @ParameterizedTest
@@ -89,7 +89,7 @@ class ShopSetmealIntegrationTest {
         jdbc.update("INSERT INTO tb_shop VALUES(102)");
         mvc.perform(get("/shop/102/setmeals"))
                 .andExpect(status().isOk())
-                .andExpect(content().json("{\"code\":1,\"data\":[]}"));
+                .andExpect(content().json("{\"code\":1,\"data\":{\"records\":[],\"total\":0}}"));
         mvc.perform(get("/shop/999/setmeals"))
                 .andExpect(status().isNotFound());
     }
@@ -126,6 +126,20 @@ class ShopSetmealIntegrationTest {
         mvc.perform(get("/shop/101/setmeals"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value(0));
+    }
+    @Test
+    void pagesPublishedMealsWithItemsAndStableTieOrder() throws Exception {
+        jdbc.update("INSERT INTO tb_shop VALUES(301)");
+        for (long id=301;id<=303;id++) {
+            jdbc.update("INSERT INTO tb_shop_setmeal(id,shop_id,name,cover_image,price,people,rules,status,sort) VALUES(?,301,'套餐','/meal.png',9900,2,'规则',1,0)",id);
+            jdbc.update("INSERT INTO tb_shop_setmeal_item(id,setmeal_id,name,quantity,unit,sort) VALUES(?,?,'主菜',1,'份',0)",id,id);
+        }
+        mvc.perform(get("/shop/301/setmeals").param("size","2").param("current","2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(3))
+                .andExpect(jsonPath("$.data.pages").value(2))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(303))
+                .andExpect(jsonPath("$.data.records[0].items[0].name").value("主菜"));
     }
 
     @Test

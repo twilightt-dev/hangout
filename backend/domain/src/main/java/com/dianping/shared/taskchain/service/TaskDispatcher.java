@@ -6,16 +6,13 @@ import com.dianping.shared.taskchain.model.TaskNodeHandler;
 import com.dianping.shared.taskchain.model.TaskNodeHolder;
 import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 
-/**
- * 只负责投递和归一化单节点结果，链路是否继续由阶段协调方决定。
- * 外部执行器必须异步且不阻塞提交，不得在协调线程执行节点；拒绝时须抛出 RejectedExecutionException。
- * 直接执行器或 CallerRunsPolicy 不满足阶段预算契约。
- */
+
 public final class TaskDispatcher {
     private final Executor cpuExecutor;
     private final Executor ioExecutor;
@@ -28,7 +25,15 @@ public final class TaskDispatcher {
     @SuppressWarnings("unchecked")
     <I, O> Future<?> dispatch(int index, TaskNodeHolder<?, ?> node, TaskContext.Execution<I, O> execution,
                              TaskContext.Snapshot<O> snapshot, Consumer<Outcome<O>> completed) {
-        var local = execution.nodeContext(snapshot);
+        TaskContext<I, O> local;
+        try {
+            local = execution.nodeContext(snapshot);
+        } catch (RuntimeException error) {
+            // 子类工厂配置错误也进入节点诊断，保证阶段结束与已提交任务的取消仍由引擎处理。
+            completed.accept(new Outcome<>(index, new TaskContext.WriteSet<>(java.util.Map.of(),
+                    java.util.Set.of(), false, null, error), error, System.nanoTime()));
+            return CompletableFuture.completedFuture(null);
+        }
         var task = new FutureTask<Void>(() -> {
             Throwable failure = null;
             try { ((TaskNodeHandler<I, O>) node.handler()).execute(local); }

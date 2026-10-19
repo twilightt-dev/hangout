@@ -7,4 +7,6 @@ import java.util.List;
 public interface ShopSetmealRepository {
     boolean shopExists(Long shopId);
     List<ShopSetmeal> findPublishedByShopId(Long shopId);
+    long countPublished(Long shopId);
+    List<ShopSetmeal> pagePublished(Long shopId, long offset, int size);
 }

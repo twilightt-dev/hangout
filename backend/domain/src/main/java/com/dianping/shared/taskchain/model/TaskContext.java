@@ -6,7 +6,7 @@ import java.util.*;
  * 每次链路调用独立创建；节点仅通过上下文提交结果。
  * 引擎拥有的属性映射与报告集合为只读快照；输入、输出及属性值保留实际类型并遵守业务只读协议。
  */
-public final class TaskContext<I, O> {
+public class TaskContext<I, O> {
     private final I input;
     //true表示节点上下文，false表示主上下文
     private final boolean nodeView;
@@ -14,6 +14,8 @@ public final class TaskContext<I, O> {
     private boolean claimed;
     //上下文是否已经被封存，封存后禁止写入
     private boolean sealed;
+    //节点工厂不得将同一个子上下文分配给多个任务
+    private boolean issued;
     //身份标记，判断一个子上下文是否属于当前主上下文
     private final Object owner;
     private Snapshot<O> snapshot;
@@ -32,6 +34,20 @@ public final class TaskContext<I, O> {
         this(input, new Snapshot<>(Map.of(), null, false), false, new Object());
     }
 
+    /** 子类创建节点上下文时调用；沿用本次请求身份与输入，使用引擎提供的可见快照。 */
+    protected TaskContext(TaskContext<I, O> parent, Snapshot<O> snapshot) {
+        this(Objects.requireNonNull(parent, "父上下文不得为空").input,
+                Objects.requireNonNull(snapshot, "节点快照不得为空"), true, parent.owner);
+    }
+
+    /**
+     * 子类覆盖此工厂，返回同类型的新节点上下文；只负责创建对象，不执行查询等业务操作。
+     * 业务属性 getter/setter 应委托 getAttribute/setAttribute，不能另存一份可变执行结果。
+     */
+    protected TaskContext<I, O> createNodeContext(Snapshot<O> snapshot) {
+        return new TaskContext<>(this, snapshot);
+    }
+
     private TaskContext(I input, Snapshot<O> snapshot, boolean nodeView, Object owner) {
         this.input = input;
         this.snapshot = snapshot;
@@ -39,47 +55,47 @@ public final class TaskContext<I, O> {
         this.owner = owner;
     }
 
-    public I getInput() {
+    public final I getInput() {
         return input;
     }
-    public synchronized Object getAttribute(String key) {
+    public final synchronized Object getAttribute(String key) {
         return getAttributes().get(key);
     }
-    public synchronized Map<String, Object> getAttributes() {
+    public final synchronized Map<String, Object> getAttributes() {
         var result = new LinkedHashMap<>(snapshot.attributes());
         removals.forEach(result::remove);
         result.putAll(writes);
         return Collections.unmodifiableMap(result);
     }
 
-    public synchronized void setAttribute(String key, Object value) {
+    public final synchronized void setAttribute(String key, Object value) {
         ensureWritable();
         Objects.requireNonNull(key, "属性 key 不得为空");
         writes.put(key, value);
         removals.remove(key);
     }
-    public synchronized void removeAttribute(String key) {
+    public final synchronized void removeAttribute(String key) {
         ensureWritable();
         Objects.requireNonNull(key, "属性 key 不得为空");
         writes.remove(key);
         removals.add(key);
     }
-    public synchronized void setOutput(O output) {
+    public final synchronized void setOutput(O output) {
         ensureWritable();
         localOutput = output;
         outputWritten = true;
     }
-    public synchronized O getOutput() { return outputWritten ? localOutput : snapshot.output(); }
-    public synchronized boolean hasOutput() { return outputWritten || snapshot.outputSet(); }
-    public synchronized boolean isSuccess() { return success; }
-    public synchronized Throwable getError() { return error; }
-    public synchronized List<PhaseExecutionResult> getPhaseResults() { return phaseResults; }
-    public synchronized List<NodeExecutionResult> getNodeResults() {
+    public final synchronized O getOutput() { return outputWritten ? localOutput : snapshot.output(); }
+    public final synchronized boolean hasOutput() { return outputWritten || snapshot.outputSet(); }
+    public final synchronized boolean isSuccess() { return success; }
+    public final synchronized Throwable getError() { return error; }
+    public final synchronized List<PhaseExecutionResult> getPhaseResults() { return phaseResults; }
+    public final synchronized List<NodeExecutionResult> getNodeResults() {
         return phaseResults.stream().flatMap(phase -> phase.nodeResults().stream()).toList();
     }
 
     //只有节点上下文可以标记自己失败，必需节点失败导致链路失败，可选节点失败保留诊断信息
-    public synchronized void fail(Throwable cause) {
+    public final synchronized void fail(Throwable cause) {
         ensureWritable();
         if (!nodeView) throw new IllegalStateException("仅节点可以标记自身失败");
         if (error == null) error = Objects.requireNonNull(cause, "失败原因不得为空");
@@ -93,7 +109,7 @@ public final class TaskContext<I, O> {
     }
 
     /** 只有根上下文可领取一次协调权限；节点拿不到此权限。 */
-    public synchronized Execution<I, O> beginExecution() {
+    public final synchronized Execution<I, O> beginExecution() {
         if (nodeView || claimed) {
             throw new IllegalStateException("上下文不能复用或由节点启动链路");
         }
@@ -159,7 +175,22 @@ public final class TaskContext<I, O> {
 
         //为节点创建独立子上下文
         public TaskContext<I, O> nodeContext(Snapshot<O> snapshot) {
-            return new TaskContext<>(root.input, snapshot, true, root.owner);
+            synchronized (root) {
+                if (root.sealed) throw new IllegalStateException("链路已经结束");
+                var node = root.createNodeContext(Objects.requireNonNull(snapshot, "节点快照不得为空"));
+                if (node == null || node.getClass() != root.getClass()) {
+                    throw new IllegalStateException("节点上下文必须与主上下文类型一致，请在子类覆盖 createNodeContext");
+                }
+                synchronized (node) {
+                    if (!node.nodeView || node.owner != root.owner || node.input != root.input
+                            || node.snapshot != snapshot || node.issued || node.claimed || node.sealed
+                            || !node.writes.isEmpty() || !node.removals.isEmpty() || node.outputWritten || node.error != null) {
+                        throw new IllegalStateException("节点工厂必须通过父上下文与当前快照创建本次执行的全新节点上下文");
+                    }
+                    node.issued = true;
+                }
+                return node;
+            }
         }
 
         //收集节点结果

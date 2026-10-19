@@ -131,6 +131,7 @@ export interface ShopReviewPage { records: ShopReview[]; total: number; current:
 export interface ShopReviewTagOption { code: string; name: string }
 
 export interface Voucher {
+  availability?: 'AVAILABLE' | 'UPCOMING' | 'SOLD_OUT'
   id?: Id
   shopId?: Id
   title?: string
@@ -172,7 +173,7 @@ export interface Blog {
   userId?: Id
   icon?: string
   name?: string
-  isLike?: boolean
+  isLike?: boolean | null
   title?: string
   images?: string
   content?: string

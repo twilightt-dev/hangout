@@ -29,4 +29,15 @@ public class ShopSetmealApplicationService {
             return repository.findPublishedByShopId(shopId).stream().map(ShopSetmealResult::from).toList();
         });
     }
+
+    public com.dianping.shopdetail.model.result.ShopPageResult<ShopSetmealResult> page(
+            com.dianping.shopdetail.model.request.ShopDetailPageRequest request) {
+        return read.execute(status -> {
+            if (!repository.shopExists(request.shopId())) throw new ShopSetmealException(404, "店铺不存在");
+            var page = new com.dianping.shopdetail.model.ShopPage<>(
+                    repository.pagePublished(request.shopId(), request.offset(), request.size()),
+                    repository.countPublished(request.shopId()), request.current(), request.size());
+            return com.dianping.shopdetail.model.result.ShopPageResult.from(page, ShopSetmealResult::from);
+        });
+    }
 }

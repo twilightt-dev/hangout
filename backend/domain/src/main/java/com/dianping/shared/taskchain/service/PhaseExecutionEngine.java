@@ -10,7 +10,24 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** 阶段协调运行在调用方线程，工作节点运行在专用执行器。 */
+/**
+ * 阶段执行引擎
+ * <p>
+ * 负责阶段内部的节点编排，根据 {@link PhaseConfig} 阶段配置控制执行方式和阶段总超时：
+ * </p>
+ * <ul>
+ *    <li>串行执行：按节点顺序逐个执行，后续节点可以读取前面成功节点的结果</li>
+ *    <li>并行执行：各节点读取阶段开始时的同一快照，通过进程内完成通知队列收集结果</li>
+ *    <li>失败处理：必需节点失败后尽快结束等待；可选节点失败仅保留诊断，丢弃其局部写入</li>
+ *    <li>超时控制：所有节点共享阶段总预算；到期时若仍有必需节点未完成，则阶段失败，仅剩可选节点时允许继续</li>
+ *    <li>结果合并：检查成功并行节点的同名属性（包括删除）和 output 写入冲突，阶段允许继续时才统一提交结果</li>
+ *    <li>提前结束：尽力取消未完成任务，不再接受迟到结果；取消不保证底层任务立即停止</li>
+ * </ul>
+ * <p>
+ * 节点投递由 {@link TaskDispatcher} 负责，阶段结果通过 {@link PhaseExecutionResult} 返回给 {@link TaskChainEngine}。
+ * 阶段失败仅丢弃本阶段的上下文写入，不回滚前序阶段结果或节点产生的外部副作用。
+ * </p>
+ */
 public final class PhaseExecutionEngine {
     private final TaskDispatcher dispatcher;
     public PhaseExecutionEngine(TaskDispatcher dispatcher) {
@@ -30,6 +47,7 @@ public final class PhaseExecutionEngine {
         private TaskContext.Snapshot<O> working;
         private final long started = System.nanoTime();
         private final long budget;
+        //完成通知队列
         private final BlockingQueue<TaskDispatcher.Outcome<O>> completed = new LinkedBlockingQueue<>();
         private final List<Future<?>> futures = new ArrayList<>();
         private final NodeExecutionResult[] reports;

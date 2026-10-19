@@ -14,6 +14,12 @@ public interface ShopSetmealMapper {
     @Select("SELECT * FROM tb_shop_setmeal WHERE shop_id = #{shopId} AND status = 1 ORDER BY sort ASC, id ASC")
     List<ShopSetmeal> findPublished(Long shopId);
 
+    @Select("SELECT COUNT(*) FROM tb_shop_setmeal WHERE shop_id = #{shopId} AND status = 1")
+    long countPublished(Long shopId);
+
+    @Select("SELECT * FROM tb_shop_setmeal WHERE shop_id = #{shopId} AND status = 1 ORDER BY sort ASC, id ASC LIMIT #{size} OFFSET #{offset}")
+    List<ShopSetmeal> pagePublished(Long shopId, long offset, int size);
+
     @Select("""
             <script>
             SELECT * FROM tb_shop_setmeal_item WHERE setmeal_id IN

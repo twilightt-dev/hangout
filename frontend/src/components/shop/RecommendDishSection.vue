@@ -12,12 +12,13 @@
         <img v-if="!brokenImages.has(dish.id)" :src="dish.coverImage" :alt="dish.name" loading="lazy" @error="brokenImages.add(dish.id)">
         <div v-else class="dish-placeholder" role="img" :aria-label="`${dish.name}暂无图片`">暂无图片</div>
         <div class="dish-card-body"><h3>{{ dish.name }}</h3><p>{{ dish.recommendCount }} 人推荐</p>
-          <button type="button" :data-test="`recommend-${dish.id}`" :disabled="dish.recommended || pending.has(dish.id) || loading" :aria-pressed="dish.recommended" @click="recommend(dish)">{{ dish.recommended ? '已推荐' : pending.has(dish.id) ? '提交中…' : '我也推荐' }}</button>
+          <button type="button" :data-test="`recommend-${dish.id}`" :disabled="stateAvailable === false || dish.recommended || pending.has(dish.id) || loading" :aria-pressed="dish.recommended" @click="recommend(dish)">{{ stateAvailable === false ? '推荐状态暂不可用' : dish.recommended ? '已推荐' : pending.has(dish.id) ? '提交中…' : '我也推荐' }}</button>
         </div>
       </article>
     </div>
     <div class="dish-browse">
-      <button v-if="!expanded && page && page.total > 6" type="button" data-test="dish-more" :disabled="loading" @click="setExpanded(true)">查看更多推荐菜</button>
+      <button v-if="preview && !listOnly && page && page.total > page.records.length" type="button" data-test="dish-more" @click="router.push(`/shops/${props.shopId}/lists/recommendations`)">查看更多推荐菜</button>
+      <button v-else-if="!preview && !expanded && page && page.total > 6" type="button" data-test="dish-more" :disabled="loading" @click="setExpanded(true)">查看更多推荐菜</button>
       <template v-if="expanded">
         <nav v-if="page && page.pages > 1" aria-label="推荐菜分页"><button type="button" data-test="dish-prev" :disabled="loading || current <= 1" @click="changePage(current - 1)">上一页</button><span>{{ current }} / {{ page.pages }}</span><button type="button" data-test="dish-next" :disabled="loading || current >= page.pages" @click="changePage(current + 1)">下一页</button></nav>
         <button type="button" data-test="dish-collapse" :disabled="loading" @click="setExpanded(false)">收起</button>
@@ -44,7 +45,9 @@ import { useAuthStore } from '@/stores/auth'
 import { getRecommendDishes, publishRecommendDish, recommendDish, type RecommendDish, type RecommendDishPage } from '@/api/recommendDish'
 import { uploadBlogImage, normalizeBlogImageUrl } from '@/api/upload'
 
-const props = defineProps<{ shopId: number }>()
+import { available, type Section } from '@/api/shopDetail'
+const props = withDefaults(defineProps<{ shopId: number; preview?: Section<RecommendDishPage>; stateAvailable?: boolean; listOnly?: boolean }>(), { stateAvailable: true })
+const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
 const router = useRouter()
 const page = ref<RecommendDishPage>()
@@ -113,7 +116,8 @@ async function recommend(dish: RecommendDish) {
     if (executionScope !== scope) return
     if (page.value) page.value.records = page.value.records.map(item => item.id === result.id ? result : item)
     notice.value = '推荐成功'
-    if (!await load() && executionScope === scope) notice.value = '推荐已成功，列表刷新失败，请重试加载'
+    emit('changed')
+    if (!props.preview && !await load() && executionScope === scope) notice.value = '推荐已成功，列表刷新失败，请重试加载'
   } catch (failure) {
     if (executionScope === scope) notice.value = failure instanceof Error ? failure.message : '推荐未确认，请重试；重复提交不会增加人数'
   } finally {
@@ -167,7 +171,8 @@ async function publish() {
   name.value = ''; coverImage.value = ''; uploadMessage.value = ''; submission = undefined
   formOpen.value = false; current.value = 1
   notice.value = '菜品已发布，已计入你的推荐'
-  if (!await load() && executionScope === scope) notice.value = '菜品已发布，列表刷新失败，请重试加载'
+  emit('changed')
+  if (!props.preview && !await load() && executionScope === scope) notice.value = '菜品已发布，列表刷新失败，请重试加载'
   if (executionScope === scope) submitting.value = false
 }
 
@@ -177,8 +182,18 @@ watch([() => props.shopId, () => auth.isAuthenticated, () => auth.user?.id], () 
   name.value = ''; coverImage.value = ''; notice.value = ''; uploadMessage.value = ''; submitError.value = ''
   uploading.value = false; submitting.value = false; submission = undefined
   pending.value.clear(); brokenImages.value.clear()
-  void load()
+  if (props.preview) {
+    loadVersion += 1; controller?.abort(); loading.value = false
+    page.value = props.preview.data ? { ...props.preview.data, records: [...props.preview.data.records] } : undefined
+    error.value = available(props.preview) ? '' : props.preview.message || '推荐菜加载失败，请稍后重试'
+  } else void load()
 }, { immediate: true })
+watch(() => props.preview, value => {
+  if (!value) return
+  loadVersion += 1; controller?.abort(); loading.value = false
+  page.value = value.data ? { ...value.data, records: [...value.data.records] } : undefined
+  error.value = available(value) ? '' : value.message || '推荐菜加载失败，请稍后重试'
+})
 onBeforeUnmount(() => { scope += 1; loadVersion += 1; controller?.abort() })
 </script>
 

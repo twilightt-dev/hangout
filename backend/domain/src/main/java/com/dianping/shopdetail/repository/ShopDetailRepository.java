@@ -1,11 +1,13 @@
 package com.dianping.shopdetail.repository;
-
-/**
- * 店铺详情仓储接口（Domain 层定义，Infrastructure 层实现）
- * <p>
- * 负责店铺基础信息、附近店铺、优惠券和探店博客的数据存取。
- * 实现类为 {@link }，
- * </p>
- */
+import com.dianping.shopdetail.model.*;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+/** 商详基础、探店、语料和周边的读取边界，不依赖旧业务 Service。 */
 public interface ShopDetailRepository {
+    Optional<ShopBaseInfo> findShop(Long shopId);
+    ShopPage<ShopVisitBlog> blogs(Long shopId, long current, int size, Long viewerId);
+    List<TagEvidence> reviewEvidence(Long shopId, LocalDateTime since, int limit);
+    List<TagEvidence> blogEvidence(Long shopId, LocalDateTime since, int limit);
+    ShopPage<ShopRelatedShop> related(ShopBaseInfo center, long current, int size);
 }

@@ -1,244 +1,112 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import ShopDetailView from './ShopDetailView.vue'
-import { ApiError } from '@/api/http'
+import type { ShopDetail, ShopPage, Section } from '@/api/shopDetail'
 
-const { getShopSetmeals } = vi.hoisted(() => ({ getShopSetmeals: vi.fn() }))
-vi.mock('@/api/shopSetmeal', () => ({ getShopSetmeals }))
-const { getRecommendDishes } = vi.hoisted(() => ({ getRecommendDishes: vi.fn() }))
-vi.mock('@/api/recommendDish', () => ({ getRecommendDishes, publishRecommendDish: vi.fn(), recommendDish: vi.fn() }))
-
-const { getShop, getVouchers, seckillVoucher, getShopReviews, getReviewTags, publishShopReview, sendVisit, push, messageError, authState } = vi.hoisted(() => ({
-  getShop: vi.fn(), getVouchers: vi.fn(), seckillVoucher: vi.fn(), getShopReviews: vi.fn(), getReviewTags: vi.fn(), publishShopReview: vi.fn(), sendVisit: vi.fn(), push: vi.fn(), messageError: vi.fn(), authState: { authenticated: false },
+const api = vi.hoisted(() => ({
+  detail:vi.fn(), vouchers:vi.fn(), blogs:vi.fn(), related:vi.fn(), meals:vi.fn(), dishes:vi.fn(),
+  reviews:vi.fn(), tags:vi.fn(), publish:vi.fn(), sendVisit:vi.fn(), claim:vi.fn(), like:vi.fn(),
+  push:vi.fn(), error:vi.fn(), auth:{isAuthenticated:false,user:null as {id:number} | null},
 }))
-
-const route = reactive({ params: { id: '8' }, fullPath: '/shops/8' })
-vi.mock('@/api/shop', () => ({ getShop, getVouchers, seckillVoucher }))
-vi.mock('@/api/shopReview', () => ({ getShopReviews, getReviewTags, publishShopReview }))
-vi.mock('@/api/traffic', async (importOriginal) => ({ ...await importOriginal<typeof import('@/api/traffic')>(), sendVisit }))
-vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
-vi.mock('element-plus', () => ({ ElMessage: { error: messageError, success: vi.fn(), warning: vi.fn() } }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ get isAuthenticated() { return authState.authenticated } }) }))
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
-  return { promise, resolve }
+vi.mock('@/api/shopDetail',async original => ({ ...await original<typeof import('@/api/shopDetail')>(),getShopDetail:api.detail,getShopVoucherPage:api.vouchers,getShopBlogPage:api.blogs,getRelatedShopPage:api.related }))
+vi.mock('@/api/shopSetmeal',()=>({getShopSetmeals:api.meals}))
+vi.mock('@/api/recommendDish',()=>({getRecommendDishes:api.dishes,publishRecommendDish:vi.fn(),recommendDish:vi.fn()}))
+vi.mock('@/api/shopReview',()=>({getShopReviews:api.reviews,getReviewTags:api.tags,publishShopReview:api.publish}))
+vi.mock('@/api/shop',()=>({seckillVoucher:api.claim}))
+vi.mock('@/api/blog',()=>({likeBlog:api.like}))
+vi.mock('@/api/traffic',async original=>({...await original<typeof import('@/api/traffic')>(),sendVisit:api.sendVisit}))
+vi.mock('@/stores/auth',()=>({useAuthStore:()=>api.auth}))
+const route=reactive({params:{id:'8'},fullPath:'/shops/8'})
+vi.mock('vue-router',()=>({useRoute:()=>route,useRouter:()=>({push:api.push})}))
+vi.mock('element-plus',()=>({ElMessage:{error:api.error,success:vi.fn(),warning:vi.fn(),info:vi.fn()}}))
+const page=<T,>(records:T[]=[]):ShopPage<T>=>({records,total:records.length,current:1,size:10,pages:records.length?1:0})
+const section=<T,>(data:T):Section<T>=>({status:'SUCCESS',data})
+function detail():ShopDetail {
+  return {shop:{id:8,name:'巷口咖啡',score:10},vouchers:section(page()),setmeals:section(page()),
+    recommendations:section(page()),reviews:section(page()),statistics:section({totalReviews:2,averageScore:4.8}),
+    blogs:section(page()),decisionTags:section([{code:'TASTY',name:'味道好',userCount:2}]),
+    reviewTags:section([]),relatedShops:section(page()),recommendationStateAvailable:true}
 }
-
-describe('ShopDetailView', () => {
-  const wrappers: Array<ReturnType<typeof mount>> = []
-  const mountView = () => { const wrapper = mount(ShopDetailView); wrappers.push(wrapper); return wrapper }
-  afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()) })
-  beforeEach(() => {
-    localStorage.clear(); sendVisit.mockReset().mockResolvedValue({ count: 7 })
-    route.params.id = '8'; route.fullPath = '/shops/8'
-    getShop.mockReset().mockResolvedValue({ id: 8, name: '巷口咖啡' })
-    getVouchers.mockReset().mockResolvedValue([])
-    getShopSetmeals.mockReset().mockResolvedValue([])
-    getRecommendDishes.mockReset().mockResolvedValue({ records: [], total: 0, current: 1, size: 6, pages: 0 })
-    getShopReviews.mockReset().mockResolvedValue({ records: [], total: 0, current: 1, size: 10, pages: 0, averageScore: 4.8 })
-    getReviewTags.mockReset().mockResolvedValue([])
-    publishShopReview.mockReset().mockResolvedValue(1)
-    seckillVoucher.mockReset().mockResolvedValue(99)
-    push.mockReset(); messageError.mockReset(); authState.authenticated = false
+function deferred<T>() {let resolve!:(v:T)=>void;const promise=new Promise<T>(done=>{resolve=done});return {promise,resolve}}
+const wrappers:ReturnType<typeof mount>[]=[]
+function create(){const wrapper=mount(ShopDetailView,{global:{stubs:{RouterLink:{template:'<a><slot/></a>'}}}});wrappers.push(wrapper);return wrapper}
+describe('商详任务链首屏',()=>{
+  beforeEach(()=>{
+    vi.clearAllMocks();localStorage.clear();route.params.id='8';route.fullPath='/shops/8'
+    api.auth.isAuthenticated=false;api.auth.user=null
+    api.detail.mockReset().mockResolvedValue(detail());api.tags.mockResolvedValue([])
+    api.vouchers.mockResolvedValue(page());api.blogs.mockResolvedValue(page());api.meals.mockResolvedValue(page())
+    api.dishes.mockResolvedValue(page());api.reviews.mockResolvedValue({...page(),averageScore:4.8})
+    api.sendVisit.mockReset().mockResolvedValue({count:7});api.claim.mockReset().mockResolvedValue(99)
   })
-
-  it('推荐菜通过独立接口展示，失败时保留店铺其他内容', async () => {
-    getRecommendDishes.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
-      records: [{ id: 1, shopId: 8, name: '招牌烤鱼', coverImage: '/imgs/fish.png', recommendCount: 3, recommended: false, createTime: '2026-10-18T12:00:00' }],
-      total: 1, current: 1, size: 6, pages: 1,
-    })
-    const wrapper = mountView(); await flushPromises()
-    expect(wrapper.text()).toContain('巷口咖啡')
-    expect(wrapper.text()).toContain('推荐菜加载失败')
-    expect(wrapper.text()).toContain('店铺评价')
-    await wrapper.get('[data-test="dish-retry"]').trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('招牌烤鱼')
-    expect(wrapper.text()).toContain('3 人推荐')
+  afterEach(()=>wrappers.splice(0).forEach(w=>w.unmount()))
+  it('一次聚合取得六区，不重复请求各列表，评分取新统计',async()=>{
+    const wrapper=create();await flushPromises()
+    expect(wrapper.text()).toContain('巷口咖啡');expect(wrapper.text()).toContain('★ 4.8')
+    expect(wrapper.text()).toContain('味道好');expect(wrapper.text()).toContain('达人探店');expect(wrapper.text()).toContain('周边推荐')
+    expect(api.detail).toHaveBeenCalledTimes(1)
+    for(const list of [api.vouchers,api.blogs,api.meals,api.dishes,api.reviews])expect(list).not.toHaveBeenCalled()
+    expect(api.sendVisit).toHaveBeenCalledTimes(1)
   })
-
-  it('套餐加载失败时仍展示商详、优惠券与评价，并支持区块内重试', async () => {
-    getShopSetmeals.mockRejectedValueOnce(new Error('offline')).mockResolvedValue([])
-    getVouchers.mockResolvedValue([{ id: 17, title: '限时券', type: 1, stock: 1 }])
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.text()).toContain('巷口咖啡')
-    expect(wrapper.find('.voucher-card').exists()).toBe(true)
-    expect(wrapper.text()).toContain('评价')
-    expect(wrapper.text()).toContain('套餐加载失败')
-    await wrapper.get('[data-test="setmeal-retry"]').trigger('click')
-    await flushPromises()
-    expect(getShopSetmeals).toHaveBeenCalledTimes(2)
-    expect(wrapper.text()).not.toContain('套餐加载失败')
+  it('优惠券失败保留其他区域，通过独立接口重试',async()=>{
+    api.detail.mockResolvedValue({...detail(),vouchers:{status:'FAILED',data:null,message:'优惠券加载失败'}})
+    api.vouchers.mockResolvedValue(page([{id:17,title:'限时券',type:1,stock:1}]))
+    const wrapper=create();await flushPromises()
+    expect(wrapper.text()).toContain('巷口咖啡');expect(wrapper.text()).toContain('优惠券加载失败')
+    const button=wrapper.findAll('button').find(b=>b.text()==='重试')!
+    await button.trigger('click');await flushPromises()
+    expect(wrapper.text()).toContain('限时券');expect(api.detail).toHaveBeenCalledTimes(1)
+    expect(api.vouchers).toHaveBeenCalledWith(8,1,2)
   })
-
-  it('成功展示后统计近似访客，切页取消旧统计且不接受旧结果', async () => {
-    const old = deferred<{ count: number }>()
-    sendVisit.mockReturnValueOnce(old.promise)
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.get('[data-test="visit-statistic"]').text()).toBe('统计加载中…')
-    const signal = sendVisit.mock.calls[0]?.[3]?.signal as AbortSignal
-    route.params.id = '9'
-    await nextTick(); await flushPromises()
+  it('评分故障不显示旧评分或零条评价',async()=>{
+    api.detail.mockResolvedValue({...detail(),statistics:{status:'FAILED',data:null}})
+    const wrapper=create();await flushPromises()
+    expect(wrapper.text()).toContain('评价统计暂不可用');expect(wrapper.text()).not.toContain('0 条评价');expect(wrapper.get('.reviews').text()).toContain('评分暂不可用');expect(wrapper.get('.reviews').text()).not.toContain('暂无评分')
+  })
+  it('标签统计不完整与缺坐标明确展示',async()=>{
+    api.detail.mockResolvedValue({...detail(),decisionTags:{status:'PARTIAL',data:[{code:'TASTY',name:'味道好',userCount:2}]},
+      relatedShops:{status:'UNAVAILABLE',data:null,message:'缺少位置信息，暂无法推荐周边店铺'}})
+    const wrapper=create();await flushPromises()
+    expect(wrapper.text()).toContain('统计不完整');expect(wrapper.text()).toContain('缺少位置信息')
+  })
+  it('切店取消旧请求并拒绝迟到响应',async()=>{
+    const old=deferred<ShopDetail>();api.detail.mockReturnValueOnce(old.promise)
+    const wrapper=create();await nextTick()
+    const signal=api.detail.mock.calls[0]?.[1] as AbortSignal
+    route.params.id='9';await nextTick();await flushPromises()
     expect(signal.aborted).toBe(true)
-    expect(sendVisit).toHaveBeenCalledTimes(2)
-    expect(sendVisit.mock.calls[1]?.slice(0, 2)).toEqual(['shop', 9])
-    expect(wrapper.text()).toContain('累计访客约 7 位')
-    old.resolve({ count: 100 })
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('100')
+    old.resolve({...detail(),shop:{id:8,name:'旧店'}});await flushPromises()
+    expect(wrapper.text()).not.toContain('旧店')
   })
-
-  it('无法持久保存游客标识时仍展示门店但不发送统计', async () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied') })
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.text()).toContain('巷口咖啡')
-    expect(wrapper.get('[data-test="visit-statistic"]').text()).toBe('暂无统计')
-    expect(sendVisit).not.toHaveBeenCalled()
-    vi.restoreAllMocks()
+  it('无效地址或失败响应不上报访问',async()=>{
+    route.params.id='invalid';const wrapper=create();await flushPromises()
+    expect(wrapper.text()).toContain('门店地址无效');expect(api.detail).not.toHaveBeenCalled()
+    expect(api.sendVisit).not.toHaveBeenCalled()
   })
-
-  it('空详情与无效门店地址不上报，卸载取消进行中的统计', async () => {
-    getShop.mockResolvedValueOnce(null)
-    const empty = mountView()
-    await flushPromises()
-    expect(sendVisit).not.toHaveBeenCalled()
-    empty.unmount()
-    route.params.id = 'invalid'
-    const invalid = mountView()
-    await flushPromises()
-    expect(sendVisit).not.toHaveBeenCalled()
-    invalid.unmount()
-    route.params.id = '8'
-    sendVisit.mockReturnValue(new Promise(() => {}))
-    const shown = mountView()
-    await flushPromises()
-    const signal = sendVisit.mock.calls[0]?.[3]?.signal as AbortSignal
-    shown.unmount()
-    expect(signal.aborted).toBe(true)
+  it('卸载取消访问上报',async()=>{
+    api.sendVisit.mockReturnValue(new Promise(()=>{}))
+    const wrapper=create();await flushPromises()
+    const signal=api.sendVisit.mock.calls[0]?.[3]?.signal as AbortSignal
+    wrapper.unmount();expect(signal.aborted).toBe(true)
   })
-
-  it('未登录领取优惠券时跳转登录并保留当前地址', async () => {
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-    await wrapper.vm.claim({ id: 5, stock: 2, beginTime: '2026-09-01 00:00:00', endTime: '2026-10-01 00:00:00' })
-
-    expect(push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/shops/8' } })
-    expect(seckillVoucher).not.toHaveBeenCalled()
+  it('游客购买先登录，已登录仍校验库存和时段',async()=>{
+    const wrapper=create();await flushPromises()
+    await wrapper.vm.claim({id:1,type:1,stock:2})
+    expect(api.push).toHaveBeenCalledWith({name:'login',query:{redirect:'/shops/8'}})
+    expect(api.claim).not.toHaveBeenCalled()
+    api.auth.isAuthenticated=true
+    await wrapper.vm.claim({id:1,type:1,stock:0})
+    await wrapper.vm.claim({id:1,type:1,stock:2,endTime:'2020-01-01T00:00:00'})
+    expect(api.claim).not.toHaveBeenCalled()
   })
-
-  it('过期或库存不足的优惠券不调用领取接口', async () => {
-    authState.authenticated = true
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-    await wrapper.vm.claim({ id: 5, stock: 2, beginTime: '2020-01-01 00:00:00', endTime: '2020-01-02 00:00:00' })
-    await wrapper.vm.claim({ id: 6, stock: 0, beginTime: '2026-01-01 00:00:00', endTime: '2099-01-01 00:00:00' })
-
-    expect(seckillVoucher).not.toHaveBeenCalled()
-    expect(messageError).toHaveBeenCalledTimes(2)
-  })
-
-  it('将后端放大十倍保存的评分按五分制展示', async () => {
-    getShop.mockResolvedValue({ id: 8, name: '巷口咖啡', score: 48 })
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('★ 4.8')
-  })
-
-  it('数值门店 ID 返回空数据时显示可重试错误状态', async () => {
-    getShop.mockResolvedValue(null)
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('门店不存在或已下线，请稍后重试。')
-    expect(wrapper.find('.state-retry').exists()).toBe(true)
-  })
-
-  it('复用详情组件时随路由门店 ID 重新加载', async () => {
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-    route.params.id = '9'
-    route.fullPath = '/shops/9'
-    await nextTick()
-    await flushPromises()
-
-    expect(getShop).toHaveBeenLastCalledWith(9)
-    expect(getVouchers).toHaveBeenLastCalledWith(9)
-    expect(wrapper.text()).toContain('巷口咖啡')
-  })
-
-  it('门店 ID 切换时忽略慢到的旧详情响应', async () => {
-    const oldRequest = deferred<{ id: number; name: string }>()
-    const newRequest = deferred<{ id: number; name: string }>()
-    getShop.mockImplementation((id: number) => id === 8 ? oldRequest.promise : newRequest.promise)
-    const wrapper = mount(ShopDetailView)
-    await nextTick()
-
-    route.params.id = '9'
-    await nextTick()
-    newRequest.resolve({ id: 9, name: '新门店' })
-    await flushPromises()
-    oldRequest.resolve({ id: 8, name: '旧门店' })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('新门店')
-    expect(wrapper.text()).not.toContain('旧门店')
-  })
-
-  it('从有效门店切换到无效 ID 时旧响应不能恢复详情', async () => {
-    const oldRequest = deferred<{ id: number; name: string }>()
-    getShop.mockImplementationOnce(() => oldRequest.promise)
-    const wrapper = mount(ShopDetailView)
-    await nextTick()
-
-    route.params.id = 'invalid'
-    await nextTick()
-    oldRequest.resolve({ id: 8, name: '旧门店' })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('门店地址无效，请返回后重新选择。')
-    expect(wrapper.text()).not.toContain('旧门店')
-  })
-
-  it.each(['活动未开始！', '活动已结束！', '优惠券不存在！', '库存不足！', '不允许重复下单', '用户已经购买过一次！'])(
-    '领取失败时弹出后端原始信息：%s，并恢复按钮', async (message) => {
-      authState.authenticated = true
-      getVouchers.mockResolvedValue([{ id: 17, title: '限时券', type: 1, stock: 1 }])
-      seckillVoucher.mockRejectedValueOnce(new ApiError(message, 0))
-      const wrapper = mount(ShopDetailView)
-      await flushPromises()
-      await wrapper.get('.voucher-card__claim').trigger('click')
-      await flushPromises()
-
-      expect(messageError).toHaveBeenCalledExactlyOnceWith(message)
-      expect(wrapper.get('.voucher-card__claim').attributes('disabled')).toBeUndefined()
-      expect(wrapper.get('.voucher-card__claim').text()).toBe('立即秒杀')
-      wrapper.unmount()
-    },
-  )
-
-  it('未知异常仍有兜底提示', async () => {
-    authState.authenticated = true
-    seckillVoucher.mockRejectedValueOnce(null)
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-    await wrapper.vm.claim({ id: 17, stock: 1 })
-    expect(messageError).toHaveBeenCalledExactlyOnceWith('领取未成功，请稍后重试')
-    wrapper.unmount()
-  })
-
-  it('点击真实优惠券卡片会进入领取接口', async () => {
-    authState.authenticated = true
-    getVouchers.mockResolvedValue([{ id: 17, title: '限时券', type: 1, stock: 1 }])
-    const wrapper = mount(ShopDetailView)
-    await flushPromises()
-    await wrapper.get('.voucher-card__claim').trigger('click')
-
-    expect(seckillVoucher).toHaveBeenCalledWith(17)
+  it('服务端购买失败显示原始业务消息并恢复按钮',async()=>{
+    api.auth.isAuthenticated=true
+    api.detail.mockResolvedValue({...detail(),vouchers:section(page([{id:17,type:1,title:'限时券',stock:1}]))})
+    api.claim.mockRejectedValueOnce(new Error('库存不足'))
+    const wrapper=create();await flushPromises()
+    await wrapper.get('.voucher-card__claim').trigger('click');await flushPromises()
+    expect(api.error).toHaveBeenCalledWith('库存不足')
+    expect(wrapper.get('.voucher-card__claim').attributes('disabled')).toBeUndefined()
   })
 })

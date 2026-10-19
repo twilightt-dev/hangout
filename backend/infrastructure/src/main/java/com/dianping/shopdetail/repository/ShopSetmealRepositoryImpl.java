@@ -23,7 +23,16 @@ public class ShopSetmealRepositoryImpl implements ShopSetmealRepository {
 
     @Override
     public List<ShopSetmeal> findPublishedByShopId(Long shopId) {
-        var rows = mapper.findPublished(shopId);
+        return map(mapper.findPublished(shopId));
+    }
+
+    public long countPublished(Long shopId) { return mapper.countPublished(shopId); }
+
+    public List<ShopSetmeal> pagePublished(Long shopId, long offset, int size) {
+        return map(mapper.pagePublished(shopId, offset, size));
+    }
+
+    private List<ShopSetmeal> map(List<com.dianping.shopdetail.persistence.dataobject.ShopSetmeal> rows) {
         if (rows.isEmpty()) return List.of();
         var items = mapper.findItems(rows.stream().map(row -> row.getId()).toList()).stream()
                 .collect(Collectors.groupingBy(row -> row.getSetmealId()));

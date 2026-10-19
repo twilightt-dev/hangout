@@ -1,13 +1,23 @@
 package com.dianping.shopdetail.model;
-
-
-/**
- * 店铺详情聚合根
- * <p>
- * DDD 聚合根，代表一个完整的店铺详情页所需的所有数据。
- * 包含店铺基础信息、评价、优惠券、探店博客、保障计划等子对象。
- * 由 {@link com.dianping.shopdetail.service.ShopDetailDomainService} 负责组装和丰富。
- * </p>
- */
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import java.util.List;
+/** 商详读取的组合模型；以新实例替换，不是跨六区写入的事务聚合根。 */
+@Getter
+@Builder(toBuilder = true)
+@AllArgsConstructor
+@NoArgsConstructor(force = true)
 public class ShopDetailAggregate {
+    private final ShopBaseInfo shop;
+    private final ShopPage<ShopVoucher> vouchers;
+    private final ShopPage<ShopSetmeal> setmeals;
+    private final ShopPage<RecommendDish> recommendations;
+    private final ShopPage<ShopReview> reviews;
+    private final ShopReviewSummary reviewSummary;
+    private final ShopPage<ShopVisitBlog> blogs;
+    private final List<ShopDecisionTag> decisionTags;
+    private final List<ShopDecisionTag> reviewTags;
+    private final ShopPage<ShopRelatedShop> relatedShops;
 }

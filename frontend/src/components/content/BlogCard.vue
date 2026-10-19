@@ -5,14 +5,14 @@
       <span v-else class="blog-card__placeholder" aria-label="暂无图片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19 9 13l3 3 3-4 5 7H4Zm0-14h16v10l-5-6-3 4-3-3-5 6V5Z" fill="currentColor"/></svg></span>
       <span class="blog-card__body"><strong>{{ blog.title || '未命名探店记录' }}</strong><span class="blog-card__author"><img v-if="blog.icon" :src="blog.icon" alt="" loading="lazy"><span v-else class="blog-card__avatar" aria-hidden="true">{{ authorInitial }}</span>{{ blog.name || '匿名探索者' }}</span></span>
     </button>
-    <button class="blog-card__like" type="button" data-test="blog-like" :aria-pressed="!!blog.isLike" :aria-label="blog.isLike ? '取消点赞' : '点赞'" @click.stop="$emit('like', blog)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.4 3.8 12A5.2 5.2 0 0 1 11 4.5L12 5.6l1-1.1a5.2 5.2 0 0 1 7.2 7.5L12 20.4Z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>{{ blog.liked || 0 }}</span></button>
+    <button class="blog-card__like" type="button" data-test="blog-like" :disabled="likeDisabled" :aria-pressed="!!blog.isLike" :aria-label="blog.isLike ? '取消点赞' : '点赞'" @click.stop="$emit('like', blog)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.4 3.8 12A5.2 5.2 0 0 1 11 4.5L12 5.6l1-1.1a5.2 5.2 0 0 1 7.2 7.5L12 20.4Z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>{{ blog.liked || 0 }}</span></button>
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Blog } from '@/types/api'
-const props = withDefaults(defineProps<{ blog: Blog; variant?: 'grid' | 'row' }>(), { variant: 'grid' })
+const props = withDefaults(defineProps<{ blog: Blog; variant?: 'grid' | 'row'; likeDisabled?: boolean }>(), { variant: 'grid', likeDisabled: false })
 defineEmits<{ open: [blog: Blog]; like: [blog: Blog] }>()
 const imageUrl = computed(() => props.blog.images?.split(',').map((item) => item.trim()).find(Boolean) || '')
 const authorInitial = computed(() => (props.blog.name || '探').slice(0, 1))

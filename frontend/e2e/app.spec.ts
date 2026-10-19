@@ -1,3 +1,4 @@
+import { shopDetail, section } from './fixtures/shopDetail'
 import { expect, test } from '@playwright/test'
 
 const result = <T>(data: T) => ({ code: 1, data })
@@ -13,7 +14,7 @@ async function mockApi(page: import('@playwright/test').Page) {
       : url.pathname === '/api/blog/hot' ? result([])
       : url.pathname === '/api/shop/of/type' ? result([])
       : url.pathname === '/api/shop/of/name' ? result([])
-      : url.pathname === '/api/shop/42' ? result({ id: 42, name: '星球咖啡', score: 48, images: '' })
+      : url.pathname === '/api/shop/42/detail' ? result(shopDetail({ id: 42, name: '星球咖啡', images: '' }, { statistics: section({totalReviews:2,averageScore:4.8}) }))
       : url.pathname === '/api/voucher/list/42' ? result([])
       : result(null)
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(json) })

@@ -17,7 +17,8 @@ public class ShopSetmealController {
     }
 
     @GetMapping("/{shopId}/setmeals")
-    public Result<List<ShopSetmealResult>> list(@PathVariable Long shopId) {
-        return Result.success(facade.list(shopId));
+    public Result<com.dianping.shopdetail.model.result.ShopPageResult<ShopSetmealResult>> list(@PathVariable Long shopId,
+            @RequestParam(defaultValue = "1") long current, @RequestParam(defaultValue = "10") int size) {
+        return Result.success(facade.page(new com.dianping.shopdetail.model.request.ShopDetailPageRequest(shopId, current, size)));
     }
 }

@@ -18,4 +18,9 @@ public class ShopSetmealFacadeImpl implements ShopSetmealFacade {
     public List<ShopSetmealResult> list(Long shopId) {
         return service.list(shopId);
     }
+
+    public com.dianping.shopdetail.model.result.ShopPageResult<ShopSetmealResult> page(
+            com.dianping.shopdetail.model.request.ShopDetailPageRequest request) {
+        return service.page(request);
+    }
 }
