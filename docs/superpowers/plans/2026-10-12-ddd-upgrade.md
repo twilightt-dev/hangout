@@ -70,7 +70,7 @@ assertThat(jdbc.queryForObject("select count(*) from tb_blog_comments", Integer.
 
 ## Task 3: 运行验证和设计记录
 
-**Files:** `CONTEXT.md`、`docs/adr/0008-DDD升级采用九模块渐进迁移并保持兼容.md`、`../../../backend/DDD.md`、`.gitignore` 中精确文档例外、运行说明及受影响脚本。
+**Files:** `../../CONTEXT.md`、`docs/adr/0008-DDD升级采用九模块渐进迁移并保持兼容.md`、`../../../backend/DDD.md`、`.gitignore` 中精确文档例外、运行说明及受影响脚本。
 
 - [ ] 更新已确认的迁移结构及试点后开发新功能的时点；未答复的业务上下文仍标记为未决。
 - [ ] 修正文档忽略规则，只让本次规格/计划/ADR进入可提交范围，保留其他忽略规则。

@@ -4,6 +4,10 @@ import com.dianping.shared.taskchain.annotation.TaskNode;
 import com.dianping.shared.taskchain.model.*;
 import com.dianping.shared.taskchain.service.TaskChainEngine;
 import com.dianping.shop.shopdetail.service.ShopDetailApplicationService;
+import com.dianping.shop.shopdetail.cache.ShopDetailCacheCoordinator;
+import com.dianping.shop.shopdetail.service.ShopDetailQueryService;
+import com.dianping.shop.shopdetail.model.result.ShopDetailResult;
+import com.dianping.shop.shared.result.ShopPageResult;
 import com.dianping.shop.shopdetail.task.AssembleShopDetailNode;
 import com.dianping.shop.shopdetail.task.EnrichShopDetailNode;
 import com.dianping.shop.shopdetail.task.QueryRecommendationNode;
@@ -254,5 +258,47 @@ class ShopDetailApplicationServiceTest {
         assertThat(result.relatedShops().status()).isEqualTo("UNAVAILABLE");
         assertThat(result.relatedShops().message()).contains("缺少位置信息");
         verify(details,never()).related(any(),anyLong(),anyInt());
+    }
+
+    /**
+     * 缓存命中时不执行商详聚合，优惠券仍按请求实时查询。
+     */
+    @Test void cacheHitSkipsPublicAggregationAndQueriesVouchersLive() {
+        @SuppressWarnings("unchecked")
+        var cache = (ShopDetailCacheCoordinator<ShopDetailResult>) mock(ShopDetailCacheCoordinator.class);
+        var queries = mock(ShopDetailQueryService.class);
+        var snapshot = new ShopDetailResult(new ShopDetailResult.BaseInfo(8L,"巷口咖啡",1L,"","商圈","地址",120.0,30.0,50L,"全天"),
+                null, null, null, null, null, null, null, null, null, false);
+        when(cache.getOrLoad(eq(8L), any())).thenReturn(snapshot);
+        when(queries.vouchers(any())).thenReturn(new ShopPageResult<>(List.of(),0,1,2,0));
+        var cached = new ShopDetailApplicationService(null, domain, 2000, 1000, cache, queries, true);
+
+        var result = cached.getShopDetail(8L, null);
+
+        assertThat(result.shop().name()).isEqualTo("巷口咖啡");
+        assertThat(result.vouchers().status()).isEqualTo("EMPTY");
+        verify(cache).getOrLoad(eq(8L), any());
+        verify(queries).vouchers(any());
+        verifyNoInteractions(details, vouchers, meals, reviews, dishes);
+    }
+
+    /**
+     * 后台预热只构建公共商详内容，不读取实时优惠券。
+     */
+    @Test void cacheWarmSkipsVoucherQuery() {
+        @SuppressWarnings("unchecked")
+        var cache = (ShopDetailCacheCoordinator<ShopDetailResult>) mock(ShopDetailCacheCoordinator.class);
+        when(cache.refresh(eq(8L), any())).thenAnswer(call -> {
+            java.util.function.Supplier<ShopDetailResult> loader = call.getArgument(1);
+            loader.get();
+            return true;
+        });
+        var cached = new ShopDetailApplicationService(null, domain, 2000, 1000, cache,
+                mock(ShopDetailQueryService.class), true);
+
+        assertThat(cached.warmShop(8L)).isTrue();
+
+        verify(vouchers, never()).page(anyLong(), anyLong(), anyInt(), any());
+        verify(details).findShop(8L);
     }
 }

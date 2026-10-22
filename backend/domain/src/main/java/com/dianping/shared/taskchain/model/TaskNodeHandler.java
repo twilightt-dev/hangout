@@ -2,7 +2,6 @@ package com.dianping.shared.taskchain.model;
 
 /**
  * 业务节点的执行契约，业务结果经上下文写集提交。
- *
  * @param <I> 链路输入类型
  * @param <O> 链路输出类型
  */

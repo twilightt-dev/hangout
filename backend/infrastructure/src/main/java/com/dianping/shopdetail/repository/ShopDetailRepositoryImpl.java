@@ -57,6 +57,14 @@ public class ShopDetailRepositoryImpl implements ShopDetailRepository {
         return jdbc.query("SELECT " + BASE_COLUMNS + " FROM tb_shop WHERE id=?", BASE, id).stream().findFirst();
     }
     /**
+     * 按标识升序读取全部店铺 ID，供 job 模块逐店预热商详缓存。
+     *
+     * @return 当前数据库中的全部店铺标识
+     */
+    public List<Long> allShopIds() {
+        return jdbc.query("SELECT id FROM tb_shop ORDER BY id", (r, n) -> r.getLong("id"));
+    }
+    /**
      * 读取当前店铺的探店笔记，并按显式传入的身份补齐点赞状态。
      *
      * @param shopId 店铺标识
@@ -133,6 +141,21 @@ public class ShopDetailRepositoryImpl implements ShopDetailRepository {
                 """, (r, n) -> new TagEvidence(r.getLong("user_id"), List.of(),
                 Objects.requireNonNullElse(r.getString("title"), "") + "。" + Objects.requireNonNullElse(r.getString("content"), "")),
                 shopId, since, limit);
+    }
+    /**
+     * 批量查询当前用户是否点赞指定博客，仅访问关系集合，不读取博客详情。
+     *
+     * @param viewerId 当前浏览者标识
+     * @param blogIds 待查询的博客标识
+     * @return 当前浏览者已点赞的博客标识
+     */
+    public Set<Long> likedBlogIds(Long viewerId, List<Long> blogIds) {
+        var liked = new LinkedHashSet<Long>();
+        for (Long blogId : blogIds) {
+            if (Boolean.TRUE.equals(redis.opsForSet().isMember(com.dianping.constant.RedisConstants.BLOG_LIKE_KEY + blogId,
+                    viewerId.toString()))) liked.add(blogId);
+        }
+        return Set.copyOf(liked);
     }
     /**
      * 以当前店铺为中心读取五公里内同类型店铺，排除自身并按距离、标识排序。

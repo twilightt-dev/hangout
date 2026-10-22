@@ -33,6 +33,7 @@ public class ShopDetailController {
      * @param shopId 店铺标识
      * @param user 服务端认证得到的用户；游客为 {@code null}
      * @return 包含六区数据与分项状态的商详响应
+     * AuthenticationPrincipal是SpringSecurity框架的注解，表示Spring从安全上下文里getPrincipal取出认证主体作为user参数传入
      */
     @GetMapping("/detail")
     public Result<ShopDetailResult> detail(@PathVariable Long shopId,@AuthenticationPrincipal UserDTO user) {

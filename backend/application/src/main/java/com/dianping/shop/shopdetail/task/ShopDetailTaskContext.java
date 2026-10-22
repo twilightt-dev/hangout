@@ -36,7 +36,19 @@ public class ShopDetailTaskContext extends TaskContext<Long, ShopDetailAggregate
      * @param shopId 店铺标识
      * @param viewerId 当前浏览者标识；游客传入 {@code null}
      */
-    public ShopDetailTaskContext(Long shopId, Long viewerId) { this(shopId); setAttribute("viewerId", viewerId); }
+    public ShopDetailTaskContext(Long shopId, Long viewerId) { this(shopId, viewerId, true); }
+    /**
+     * 创建可控制是否查询实时优惠券的商详上下文。
+     *
+     * @param shopId 店铺标识
+     * @param viewerId 当前浏览者标识；游客传入 {@code null}
+     * @param includeVouchers 是否在本次聚合中读取优惠券
+     */
+    public ShopDetailTaskContext(Long shopId, Long viewerId, boolean includeVouchers) {
+        this(shopId);
+        setAttribute("viewerId", viewerId);
+        setAttribute("includeVouchers", includeVouchers);
+    }
     /**
      * 创建 ShopDetailTaskContext，初始化所需依赖及实例状态。
      *
@@ -65,6 +77,12 @@ public class ShopDetailTaskContext extends TaskContext<Long, ShopDetailAggregate
      * @return 当前视图可见的业务值；尚未提供时为 {@code null}
      */
     public Long getViewerId() { return (Long) getAttribute("viewerId"); }
+    /**
+     * 判断当前聚合是否需要读取优惠券区域。
+     *
+     * @return 是否读取优惠券
+     */
+    public boolean includesVouchers() { return !Boolean.FALSE.equals(getAttribute("includeVouchers")); }
     /**
      * 取得本次请求统一使用的近期口碑统计起点。
      *
