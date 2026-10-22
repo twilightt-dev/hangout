@@ -8,6 +8,12 @@ import java.util.Optional;
  */
 public interface ShopDetailRepository {
     /**
+     * 按店铺标识升序取得当前全部店铺 ID，供后台商详快照预热使用。
+     *
+     * @return 当前全部店铺标识
+     */
+    List<Long> allShopIds();
+    /**
      * 读取店铺自身基础资料，不使用旧缓存中的评价统计。
      *
      * @param shopId 店铺标识
@@ -42,6 +48,14 @@ public interface ShopDetailRepository {
      * @return 近期探店笔记的作者与文本证据列表
      */
     List<TagEvidence> blogEvidence(Long shopId, LocalDateTime since, int limit);
+    /**
+     * 批量读取浏览者已点赞的探店博客标识。
+     *
+     * @param viewerId 当前浏览者标识
+     * @param blogIds 待查询的博客标识
+     * @return 当前浏览者已点赞的博客标识
+     */
+    java.util.Set<Long> likedBlogIds(Long viewerId, List<Long> blogIds);
     /**
      * 以当前店铺为中心读取五公里内同类型店铺，排除自身并按距离、标识排序。
      *

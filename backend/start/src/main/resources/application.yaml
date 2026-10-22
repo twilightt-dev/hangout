@@ -28,6 +28,14 @@ shop:
   geo:
     init: true
 
+shop-detail:
+  # 公共商详快照的逻辑有效期与 Redis 物理 TTL 上限
+  cache-logical-ttl-ms: 2100000
+  cache-physical-ttl-ms: 3600000
+  # 每次写入最多提前 5 分钟失效，用于分散集中过期
+  cache-physical-ttl-jitter-ms: 300000
+  cache-enabled: true
+
 app:
   upload:
     directory: ${UPLOAD_DIR:./uploads}
@@ -45,3 +53,11 @@ security:
     secret: ${JWT_SECRET}
     access-ttl: PT15M
     refresh-ttl: P7D
+
+
+rocketmq:
+  # RocketMQ NameServer 地址，根据实际部署环境设置
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    # 生产者组
+    group: comment-producer-group

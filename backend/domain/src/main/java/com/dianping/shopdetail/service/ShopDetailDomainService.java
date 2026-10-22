@@ -79,9 +79,21 @@ public class ShopDetailDomainService {
      * @return 包含查询事实及衍生数据的商详组合结果
      */
     public ShopDetailAggregate getShopDetail(Long shopId, Long viewerId) {
+        return getShopDetail(shopId, viewerId, true);
+    }
+
+    /**
+     * 串行查询商详快照
+     * @param shopId 店铺标识
+     * @param viewerId 当前浏览者标识；游客传入 {@code null}
+     * @param includeVouchers 是否在本次聚合中读取优惠券
+     * @return 包含查询事实及衍生数据的商详组合结果
+     */
+    public ShopDetailAggregate getShopDetail(Long shopId, Long viewerId, boolean includeVouchers) {
         ShopDetailAggregate aggregate = new ShopDetailAggregate();
         aggregate.setShop(base(shopId));
-        aggregate.setVouchers(vouchers.page(shopId, 1, VOUCHER_PREVIEW_SIZE, LocalDateTime.now()));
+        aggregate.setVouchers(includeVouchers
+                ? vouchers.page(shopId, 1, VOUCHER_PREVIEW_SIZE, LocalDateTime.now()) : null);
         aggregate.setSetmeals(meals.pageWithTotal(shopId, 1, SETMEAL_PREVIEW_SIZE));
         aggregate.setRecommendations(dishes.pageWithTotal(shopId, 1, DISH_PREVIEW_SIZE));
         aggregate.setRecommendedIds(recommendedIds(viewerId, aggregate.getRecommendations()));
@@ -109,6 +121,25 @@ public class ShopDetailDomainService {
     public ShopBaseInfo base(Long shopId) {
         if (shopId == null || shopId <= 0) throw new ShopDetailException(400, "店铺 ID 必须为正整数");
         return details.findShop(shopId).orElseThrow(() -> new ShopDetailException(404, "店铺不存在"));
+    }
+
+    /**
+     * 取得全部店铺标识，供定时预热逐店构建公共商详快照。
+     *
+     * @return 当前全部店铺标识
+     */
+    public List<Long> allShopIds() { return details.allShopIds(); }
+
+    /**
+     * 批量读取浏览者已点赞的博客标识。
+     *
+     * @param viewerId 当前浏览者标识；游客传入 {@code null}
+     * @param blogIds 待查询的博客标识
+     * @return 当前浏览者已点赞的博客标识
+     */
+    public Set<Long> likedBlogIds(Long viewerId, List<Long> blogIds) {
+        if (viewerId == null || blogIds.isEmpty()) return Set.of();
+        return Set.copyOf(details.likedBlogIds(viewerId, blogIds));
     }
 
     /**
@@ -157,6 +188,17 @@ public class ShopDetailDomainService {
     public Set<Long> recommendedIds(Long viewerId, ShopPage<RecommendDish> page) {
         if (viewerId == null || page.records().isEmpty()) return Set.of();
         return Set.copyOf(dishes.recommendedIds(viewerId, page.records().stream().map(RecommendDish::id).toList()));
+    }
+
+    /**
+     * 批量读取当前浏览者已推荐的菜品标识。
+     * @param viewerId 当前浏览者标识；游客传入 {@code null}
+     * @param dishIds 待查询的菜品标识
+     * @return 当前浏览者已推荐的菜品标识
+     */
+    public Set<Long> recommendedIds(Long viewerId, List<Long> dishIds) {
+        if (viewerId == null || dishIds.isEmpty()) return Set.of();
+        return Set.copyOf(dishes.recommendedIds(viewerId, dishIds));
     }
 
     /**

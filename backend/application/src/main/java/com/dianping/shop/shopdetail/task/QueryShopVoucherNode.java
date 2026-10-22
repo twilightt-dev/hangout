@@ -32,6 +32,10 @@ public class QueryShopVoucherNode implements TaskNodeHandler<Long, ShopDetailAgg
      */
     @Override public void execute(TaskContext<Long, ShopDetailAggregate> value) {
         var context = (ShopDetailTaskContext) value;
+        if (!context.includesVouchers()) {
+            context.put("vouchers", SectionResult.unavailable("UNAVAILABLE", "优惠券在请求时实时查询"));
+            return;
+        }
         context.put("vouchers", SectionResult.attempt(() -> domain.vouchers(context.getShopId(), 1, ShopDetailDomainService.VOUCHER_PREVIEW_SIZE),
                 page -> page.records().isEmpty()));
     }

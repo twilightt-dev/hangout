@@ -5,10 +5,12 @@ import com.dianping.shop.shared.result.ShopPageResult;
 import com.dianping.shop.shopdetail.model.result.SectionResult;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult.*;
 import com.dianping.shopdetail.service.ShopDetailDomainService;
+import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
- * 独立“查看更多”用例；首屏任务链直接调用领域服务。
+ * 负责实现“查看更多”的功能
  */
 @Service
 public class ShopDetailQueryService {
@@ -24,8 +26,7 @@ public class ShopDetailQueryService {
     public ShopDetailQueryService(ShopDetailDomainService domain) { this.domain = domain; }
 
     /**
-     * 读取优惠券，沿用上架、有效期和可购买优先的展示规则。
-     *
+     * 优惠券分页查询
      * @param request 已经定义字段约束的业务请求
      * @return 优惠券的分页结果，包含总数与当前页记录
      */
@@ -35,8 +36,8 @@ public class ShopDetailQueryService {
     }
 
     /**
+     * 探店笔记分页查询
      * 读取当前店铺的探店笔记，并按显式传入的身份补齐点赞状态。
-     *
      * @param request 已经定义字段约束的业务请求
      * @param viewerId 当前浏览者标识；游客传入 {@code null}
      * @return 探店笔记及当前浏览者点赞状态的分页结果，包含总数与当前页记录
@@ -47,8 +48,28 @@ public class ShopDetailQueryService {
     }
 
     /**
-     * 以当前店铺为中心读取五公里内同类型店铺，排除自身并按距离、标识排序。
-     *
+     * 补齐缓存推荐菜品的个人推荐状态
+     * @param viewerId 当前浏览者标识
+     * @param dishIds 当前商详快照中的推荐菜标识
+     * @return 当前用户已推荐的菜品id的集合
+     */
+    public Set<Long> recommendedIds(Long viewerId, List<Long> dishIds) {
+        return domain.recommendedIds(viewerId, dishIds);
+    }
+
+    /**
+     * 批量读取当前用户对缓存博客的点赞状态。
+     * 补齐缓存博客的个人点赞状态
+     * @param viewerId 当前浏览者标识
+     * @param blogIds 当前商详快照中的博客标识
+     * @return 当前用户已点赞的博客标识
+     */
+    public Set<Long> likedBlogIds(Long viewerId, List<Long> blogIds) {
+        return domain.likedBlogIds(viewerId, blogIds);
+    }
+
+    /**
+     * 周边店铺分页查询
      * @param request 已经定义字段约束的业务请求
      * @return 带可用状态的周边分页结果
      */

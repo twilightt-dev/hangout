@@ -6,7 +6,6 @@ import java.util.function.Supplier;
 
 /**
  * 页面局部结果；不可用时 data 为空，不伪造零值或成功空列表。
- *
  * @param <T> 当前业务数据类型
  * @param status 业务或节点状态
  * @param data 业务数据
