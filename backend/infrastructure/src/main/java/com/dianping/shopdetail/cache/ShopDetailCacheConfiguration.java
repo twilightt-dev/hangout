@@ -31,13 +31,12 @@ public class ShopDetailCacheConfiguration {
     }
 
     /**
-     * 创建带逻辑过期、物理 TTL、锁租约和冷启动等待配置的协调器。
+     * 创建带逻辑过期、物理 TTL 和冷启动等待配置的协调器，锁由看门狗续期。
      * @param cache Redis 快照与锁适配器
      * @param executor 有界后台刷新执行器
      * @param logicalTtl 逻辑有效期，默认 35 分钟
      * @param physicalTtl 物理 TTL 上限，默认 60 分钟
      * @param physicalTtlJitter 物理 TTL 最大提前量，默认 5 分钟
-     * @param lockLease 重建锁租约，默认 120 秒
      * @param waitTimeout 冷启动等待上限，默认 2 秒
      * @param waitInterval 冷启动重读间隔，默认 50 毫秒
      * @return 配置完成的公共商详缓存协调器
@@ -48,11 +47,10 @@ public class ShopDetailCacheConfiguration {
             @Value("${shop-detail.cache-logical-ttl-ms:2100000}") long logicalTtl,
             @Value("${shop-detail.cache-physical-ttl-ms:3600000}") long physicalTtl,
             @Value("${shop-detail.cache-physical-ttl-jitter-ms:300000}") long physicalTtlJitter,
-            @Value("${shop-detail.cache-lock-lease-ms:120000}") long lockLease,
-            @Value("${shop-detail.cache-wait-timeout-ms:2000}") long waitTimeout,
-            @Value("${shop-detail.cache-wait-interval-ms:50}") long waitInterval) {
+            @Value("${shop-cache.lock-wait-ms:2000}") long waitTimeout,
+            @Value("${shop-cache.lock-retry-ms:50}") long waitInterval) {
         return new ShopDetailCacheCoordinator<>(cache, executor, Clock.systemUTC(), Duration.ofMillis(logicalTtl),
-                Duration.ofMillis(physicalTtl), Duration.ofMillis(physicalTtlJitter), Duration.ofMillis(lockLease),
+                Duration.ofMillis(physicalTtl), Duration.ofMillis(physicalTtlJitter),
                 Duration.ofMillis(waitTimeout), Duration.ofMillis(waitInterval));
     }
 }

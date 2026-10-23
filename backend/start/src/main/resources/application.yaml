@@ -28,6 +28,16 @@ shop:
   geo:
     init: true
 
+# 店铺防穿透与两个详情入口共享的同店协调配置。
+shop-cache:
+  bloom-capacity: 100000
+  bloom-false-probability: 0.001
+  bloom-batch-size: 1000
+  bloom-retry-ms: 30000
+  null-ttl-ms: 120000
+  lock-wait-ms: 2000
+  lock-retry-ms: 50
+
 shop-detail:
   # 公共商详快照的逻辑有效期与 Redis 物理 TTL 上限
   cache-logical-ttl-ms: 2100000

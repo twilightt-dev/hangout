@@ -1,6 +1,6 @@
 package com.dianping.shopdetail.cache;
 
-import com.dianping.constant.RedisConstants;
+import com.dianping.shared.cache.ShopCacheProtection;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheEntry;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheException;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult;
@@ -9,37 +9,31 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 /**
- * Redis 公共商详快照与 token 所有权重建锁适配器。
+ * Redis 公共商详快照与 Redisson 同店锁适配器。
  */
 @Component
 public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
-    //Lua脚本，把比锁和删锁合并成一个原子操作
-    private static final DefaultRedisScript<Long> UNLOCK = new DefaultRedisScript<>("""
-            if redis.call('get', KEYS[1]) == ARGV[1] then
-                return redis.call('del', KEYS[1])
-            end
-            return 0
-            """, Long.class);
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
+    private final ShopCacheProtection protection;
 
     /**
      * 创建商详缓存适配器。
      *
      * @param redis Redis 字符串模板
      * @param mapper JSON 序列化器
+     * @param protection 两入口共享的布隆过滤器、空值标记和同店协调器
      */
-    public RedisShopDetailCache(StringRedisTemplate redis, ObjectMapper mapper) {
+    public RedisShopDetailCache(StringRedisTemplate redis, ObjectMapper mapper, ShopCacheProtection protection) {
         this.redis = redis;
         this.mapper = mapper;
+        this.protection = protection;
     }
 
     /**
@@ -54,19 +48,13 @@ public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
             if (value == null) return Optional.empty();
             //把redis里存的json字符串反序列化为对象
             var stored = mapper.readValue(value, StoredSnapshot.class);
-            //非法的直接删掉
+            // 脏数据按未命中处理，由持锁回源覆盖，避免误删并发发布的新快照。
             if (stored == null || stored.data() == null || stored.logicalExpiresAt() == null) {
-                redis.delete(key);
                 return Optional.empty();
             }
             //返回
             return Optional.of(new ShopDetailCacheEntry<>(stored.data(), stored.logicalExpiresAt()));
         } catch (JsonProcessingException malformed) {
-            try {
-                redis.delete(key);
-            } catch (DataAccessException failure) {
-                throw unavailable("商详缓存脏数据清理失败", failure);
-            }
             return Optional.empty();
         } catch (DataAccessException failure) {
             throw unavailable("商详缓存读取失败", failure);
@@ -82,7 +70,7 @@ public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
      */
     @Override public void put(Long shopId, ShopDetailResult value, Instant logicalTtl, Duration physicalTtl) {
         try {
-            redis.opsForValue().set(cacheKey(shopId), mapper.writeValueAsString(new StoredSnapshot(value, logicalTtl)), physicalTtl);
+            protection.publish(shopId, cacheKey(shopId), mapper.writeValueAsString(new StoredSnapshot(value, logicalTtl)), physicalTtl);
         } catch (JsonProcessingException failure) {
             throw unavailable("商详缓存序列化失败", failure);
         } catch (DataAccessException failure) {
@@ -90,50 +78,22 @@ public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
         }
     }
 
-    /**
-     * 原子取得当前店铺的重建锁。
-     * @param shopId 店铺标识
-     * @param token 锁所有者标记
-     * @param lease 锁租约
-     * @return 是否成功取得锁
-     */
-    @Override
-    public boolean tryLock(Long shopId, String token, Duration lease) {
-        try {
-            return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(lockKey(shopId), token, lease));
-        } catch (DataAccessException failure) {
-            throw unavailable("商详重建锁不可用", failure);
-        }
+    /** 两入口共享同一份已完整加载的布隆过滤器。 */
+    @Override public boolean mayExist(Long shopId) { return protection.mayExist(shopId); }
+    /** 读取共享空值标记，读取故障按未命中处理。 */
+    @Override public boolean isNotFound(Long shopId) { return protection.isNotFound(shopId); }
+    /** 明确查无店铺后，在同店锁内写入共享空值标记。 */
+    @Override public void markNotFound(Long shopId) { protection.markNotFound(shopId); }
+    /** 冷启动和后台刷新均尝试立即获取，等待由协调器控制。 */
+    @Override public ShopCacheProtection.Lease tryLock(Long shopId) {
+        return protection.tryLock(shopId, Duration.ZERO);
     }
-
-    /**
-     * 仅释放仍属于指定 token 的重建锁。
-     *
-     * @param shopId 店铺标识
-     * @param token 锁所有者标记
-     */
-    @Override public void unlock(Long shopId, String token) {
-        try {
-            redis.execute(UNLOCK, List.of(lockKey(shopId)), token);
-        } catch (DataAccessException failure) {
-            throw unavailable("商详重建锁释放失败", failure);
-        }
-    }
-
-    //缓存key cache:shop-detail:id
-    private static String cacheKey(Long shopId) { return RedisConstants.SHOP_DETAIL_CACHE_KEY + shopId; }
-    //锁key lock:shop-detail:id
-    private static String lockKey(Long shopId) { return RedisConstants.SHOP_DETAIL_CACHE_LOCK_KEY + shopId; }
-
-    //缓存不可用的异常
+    /** 公共快照的稳定缓存键。 */
+    private static String cacheKey(Long shopId) { return "cache:shop-detail:" + shopId; }
+    /** 包装缓存访问故障，供应用层回退实时查询。 */
     private static ShopDetailCacheException unavailable(String message, Throwable cause) {
         return new ShopDetailCacheException(message, cause);
     }
-
-    /**
-     * Redis里存的value
-     * @param data 公共商详快照
-     * @param logicalExpiresAt 逻辑过期时间
-     */
-    private record StoredSnapshot(ShopDetailResult data, Instant logicalExpiresAt) { }
+    /** 与 Redis value 一起存储的逻辑有效期和公共数据。 */
+    public record StoredSnapshot(ShopDetailResult data, Instant logicalExpiresAt) { }
 }

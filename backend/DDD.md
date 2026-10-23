@@ -16,7 +16,7 @@
 | infrastructure | 保留 POM，当前无评论适配器 |
 | facade | 保留 POM，当前无评论门面 |
 
-模块不等于领域，预留模块并不要求简单业务立即迁入 DDD。service 不反向依赖其他项目模块；domain 不声明生产依赖，application 仅依赖 domain 和 Spring 的上下文、事务库。空模块可能不生成普通 JAR；start 仍可构建。
+模块不等于领域，预留模块并不要求简单业务立即迁入 DDD。service 不依赖 application 或 infrastructure；本次店铺缓存实现允许 service 依赖 domain 中无框架的共享缓存协调端口，使旧店铺入口和商详应用用例使用同一技术实现，禁止从此依赖引入商详用例或领域编排。端口定义、失败语义与取舍见 [ADR 0019](../docs/adr/0019-店铺防穿透采用共享布隆过滤器与空值标记.md)。domain 不声明运行时生产依赖，application 仅依赖 domain 和 Spring 的上下文、事务库。空模块可能不生成普通 JAR；start 仍可构建。
 
 ## 评论结构
 

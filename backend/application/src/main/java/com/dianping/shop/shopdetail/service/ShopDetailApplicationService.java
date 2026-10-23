@@ -1,6 +1,8 @@
 package com.dianping.shop.shopdetail.service;
 
 import com.dianping.shared.taskchain.enums.*;
+import com.dianping.shared.cache.ShopCacheAccessException;
+import com.dianping.shared.cache.ShopCacheProtection;
 import com.dianping.shared.taskchain.model.PhaseConfig;
 import com.dianping.shared.taskchain.service.TaskChainEngine;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult;
@@ -52,6 +54,12 @@ public class ShopDetailApplicationService {
      * 是否启用公共快照缓存。
      */
     private final boolean cacheEnabled;
+    /** 关闭公共快照缓存时仍需保护商详入口，不让开关绕过防穿透。 */
+    @Autowired(required = false)
+    private ShopCacheProtection protection;
+    /** 缓存关闭时仍沿用同一份前台等待预算。 */
+    @Value("${shop-cache.lock-wait-ms:2000}")
+    private long protectionWaitMillis = 2000;
 
     /**
      * 创建 ShopDetailApplicationService，初始化所需依赖及实例状态。
@@ -110,7 +118,30 @@ public class ShopDetailApplicationService {
             //补齐个人状态
             return attachRequestData(snapshot, shopId, viewerId);
         }
-        //无法走缓存时走实时查询
+        return loadWithProtection(shopId, viewerId);
+    }
+
+    /** 关闭公共快照时仍检查存在性并按同店互斥回源；锁不可用则仅实时查询。 */
+    private ShopDetailResult loadWithProtection(Long shopId, Long viewerId) {
+        if (protection != null) {
+            if (protection.isNotFound(shopId) || !protection.mayExist(shopId))
+                throw new ShopDetailException(404, "店铺不存在");
+            ShopCacheProtection.Lease lease;
+            try { lease = protection.tryLock(shopId, Duration.ofMillis(protectionWaitMillis)); }
+            catch (ShopCacheAccessException failure) { return loadUncached(shopId, viewerId); }
+            if (lease == null) throw new ShopDetailException(503, "商详暂时不可用，请稍后重试");
+            try (lease) {
+                if (protection.isNotFound(shopId)) throw new ShopDetailException(404, "店铺不存在");
+                try { return loadUncached(shopId, viewerId); }
+                catch (ShopDetailException failure) {
+                    if (failure.status() == 404) {
+                        try { protection.markNotFound(shopId); }
+                        catch (ShopCacheAccessException ignored) { /* 不改变已确认的不存在结果。 */ }
+                    }
+                    throw failure;
+                }
+            }
+        }
         return loadUncached(shopId, viewerId);
     }
 

@@ -1,4 +1,5 @@
 package com.dianping.exception;
+import com.dianping.shared.cache.ShopCacheAccessException;
 
 import com.dianping.result.Result;
 import io.jsonwebtoken.JwtException;
@@ -24,6 +25,13 @@ import com.dianping.shopdetail.exception.RecommendDishException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /** 缓存协调失败的写操作已回滚，明确返回暂不可用。 */
+    @ExceptionHandler(ShopCacheAccessException.class)
+    public ResponseEntity<Result<Void>> shopCacheUnavailable(ShopCacheAccessException failure) {
+        log.warn("店铺写操作缓存协调失败", failure);
+        return ResponseEntity.status(503).body(Result.error("店铺暂时不可用，请稍后重试"));
+    }
 
     @ExceptionHandler(com.dianping.shopdetail.exception.ShopDetailException.class)
     public ResponseEntity<Result<Void>> handleShopDetailException(com.dianping.shopdetail.exception.ShopDetailException exception) {

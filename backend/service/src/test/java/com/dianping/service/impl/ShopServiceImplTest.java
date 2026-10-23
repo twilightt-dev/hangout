@@ -1,6 +1,8 @@
 package com.dianping.service.impl;
 
 import com.dianping.cache.CacheClient;
+import com.dianping.shared.cache.ShopCacheProtection;
+import java.time.Duration;
 import com.dianping.cache.CacheResult;
 import com.dianping.constant.RedisConstants;
 import com.dianping.entity.Shop;
@@ -31,6 +33,7 @@ class ShopServiceImplTest {
     private GeoOperations<String, String> geoOperations;
     private CacheClient cacheClient;
     private ShopServiceImpl service;
+    private ShopCacheProtection protection;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
@@ -46,6 +49,10 @@ class ShopServiceImplTest {
         service.objectMapper = new ObjectMapper();
         cacheClient = mock(CacheClient.class);
         service.cacheClient = cacheClient;
+        protection = mock(ShopCacheProtection.class);
+        service.protection = protection;
+        when(protection.mayExist(anyLong())).thenReturn(true);
+        when(protection.tryLock(anyLong(), any(Duration.class))).thenAnswer(call -> mock(ShopCacheProtection.Lease.class));
     }
 
     @Test
@@ -59,6 +66,59 @@ class ShopServiceImplTest {
         assertThat(result.getCode()).isEqualTo(0);
         assertThat(result.getMsg()).isEqualTo("商户不存在");
         verify(service, never()).getById(shopId);
+    }
+
+    /** 过滤器否定时，旧详情入口不再查询数据库。 */
+    @Test void bloomNegativeSkipsDatabase() {
+        when(cacheClient.get(anyString(), eq(Shop.class))).thenReturn(CacheResult.miss());
+        when(protection.mayExist(999L)).thenReturn(false);
+        assertThat(service.queryById(999L).getMsg()).isEqualTo("商户不存在");
+        verify(service, never()).getById(999L);
+    }
+
+    /** 一个入口写入的共享空值标记可直接阻断旧入口回源。 */
+    @Test void sharedAbsentMarkerSkipsDatabase() {
+        when(cacheClient.get(anyString(), eq(Shop.class))).thenReturn(CacheResult.miss());
+        when(protection.isNotFound(999L)).thenReturn(true);
+        assertThat(service.queryById(999L).getMsg()).isEqualTo("商户不存在");
+        verify(service, never()).getById(999L);
+    }
+
+    /** 过滤器写入失败向外抛异常，使外层新增事务能够回滚。 */
+    @Test void failedBloomWriteFailsCreationAndReleasesLock() {
+        ShopMapper mapper = mock(ShopMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", mapper);
+        when(mapper.insert(any(Shop.class))).thenReturn(1);
+        var lease = mock(ShopCacheProtection.Lease.class);
+        when(protection.tryLock(eq(301L), any())).thenReturn(lease);
+        doThrow(new com.dianping.shared.cache.ShopCacheAccessException("Redis 不可用", null))
+                .when(protection).add(301L);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.save(new Shop().setId(301L)))
+                .isInstanceOf(com.dianping.shared.cache.ShopCacheAccessException.class);
+        verify(protection, never()).evict(301L);
+        verify(lease).close();
+    }
+
+    /** 业务方法返回后仍持锁，事务真正完成后才释放。 */
+    @Test void creationKeepsLockUntilTransactionCompletion() {
+        ShopMapper mapper = mock(ShopMapper.class);
+        ReflectionTestUtils.setField(service, "baseMapper", mapper);
+        when(mapper.insert(any(Shop.class))).thenReturn(1);
+        var lease = mock(ShopCacheProtection.Lease.class);
+        when(protection.tryLock(eq(302L), any())).thenReturn(lease);
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertThat(service.save(new Shop().setId(302L))).isTrue();
+            verify(lease, never()).close();
+            var callbacks = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            callbacks.forEach(callback -> callback.beforeCommit(false));
+            callbacks.forEach(callback -> callback.afterCompletion(0));
+            verify(lease).close();
+            verify(protection).add(302L);
+            verify(protection).evict(302L);
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

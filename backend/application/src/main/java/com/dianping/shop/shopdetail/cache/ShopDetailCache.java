@@ -1,6 +1,7 @@
 package com.dianping.shop.shopdetail.cache;
 
 import java.time.Duration;
+import com.dianping.shared.cache.ShopCacheProtection;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -26,19 +27,12 @@ public interface ShopDetailCache<T> {
      */
     void put(Long shopId, T value, Instant logicalTtl, Duration physicalTtl);
 
-    /**
-     * 原子取得当前店铺的重建锁。
-     * @param shopId 店铺标识
-     * @param token 锁所有者标记
-     * @param lease 锁租约
-     * @return 是否成功取得锁
-     */
-    boolean tryLock(Long shopId, String token, Duration lease);
-
-    /**
-     * 仅释放仍属于指定 token 的重建锁。
-     * @param shopId 店铺标识
-     * @param token 锁所有者标记
-     */
-    void unlock(Long shopId, String token);
+    /** 判断过滤器是否允许当前 ID 回源，故障时放行。 */
+    boolean mayExist(Long shopId);
+    /** 读取共享不存在标记。 */
+    boolean isNotFound(Long shopId);
+    /** 明确查无店铺后发布短期不存在标记，必须持有同店锁。 */
+    void markNotFound(Long shopId);
+    /** 尝试获取同店锁，使用调用线程的所有权。 */
+    ShopCacheProtection.Lease tryLock(Long shopId);
 }
