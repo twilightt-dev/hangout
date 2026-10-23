@@ -1,6 +1,6 @@
 package com.dianping.shop.review.model.result;
 
-import com.dianping.shopdetail.model.ShopReview;
+import com.dianping.shop.shopdetail.model.ShopReview;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;

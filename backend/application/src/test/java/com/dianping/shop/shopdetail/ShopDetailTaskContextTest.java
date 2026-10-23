@@ -6,7 +6,7 @@ import com.dianping.shared.taskchain.model.TaskNodeHolder;
 import com.dianping.shared.taskchain.model.TaskNodeRegistry;
 import com.dianping.shared.taskchain.service.TaskChainEngine;
 import com.dianping.shop.shopdetail.task.ShopDetailTaskContext;
-import com.dianping.shopdetail.model.ShopDetailAggregate;
+import com.dianping.shop.shopdetail.model.ShopDetailAggregate;
 import java.time.Duration;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;

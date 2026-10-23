@@ -4,7 +4,7 @@ import com.dianping.shop.shared.request.ShopListPageRequest;
 import com.dianping.shop.shared.result.ShopPageResult;
 import com.dianping.shop.shopdetail.model.result.SectionResult;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult.*;
-import com.dianping.shopdetail.service.ShopDetailDomainService;
+
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;

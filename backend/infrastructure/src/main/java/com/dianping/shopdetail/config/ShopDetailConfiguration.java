@@ -1,6 +1,6 @@
 package com.dianping.shopdetail.config;
-import com.dianping.shopdetail.service.ShopDetailDomainService;
-import com.dianping.shopdetail.repository.*;
+import com.dianping.shop.shopdetail.repository.*;
+import com.dianping.shop.shopdetail.service.ShopDetailDomainService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
@@ -21,8 +21,8 @@ public class ShopDetailConfiguration {
      * @return 通过仓储接口装配的商详领域服务
      */
     @Bean public ShopDetailDomainService shopDetailDomainService(ShopDetailRepository details,
-            ShopVoucherRepository vouchers, ShopSetmealRepository meals, ShopReviewRepository reviews,
-            RecommendDishRepository dishes) {
+                                                                 ShopVoucherRepository vouchers, ShopSetmealRepository meals, ShopReviewRepository reviews,
+                                                                 RecommendDishRepository dishes) {
         return new ShopDetailDomainService(details, vouchers, meals, reviews, dishes);
     }
 }

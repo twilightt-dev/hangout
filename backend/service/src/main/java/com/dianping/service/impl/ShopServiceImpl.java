@@ -1,6 +1,11 @@
 package com.dianping.service.impl;
 
 import com.dianping.cache.CacheClient;
+import com.dianping.shop.cache.ShopCacheProtection;
+import com.dianping.shop.cache.ShopCacheAccessException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.dianping.cache.CacheResult;
 import com.dianping.cache.CacheState;
 import com.dianping.constant.RedisConstants;
@@ -15,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessException;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.GeoResults;
@@ -24,7 +28,6 @@ import org.springframework.data.geo.Point;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.domain.geo.GeoReference;
 import org.springframework.data.redis.domain.geo.GeoShape;
 import org.springframework.stereotype.Service;
@@ -32,11 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.Serializable;
 import java.time.Duration;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -58,99 +59,65 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
     ObjectMapper objectMapper;
     @Autowired
     CacheClient cacheClient ;
+    @Autowired
+    ShopCacheProtection protection;
+    @Value("${shop-cache.lock-wait-ms:2000}")
+    long cacheWaitMillis = 2000;
+    @Value("${shop-cache.lock-retry-ms:50}")
+    long cacheRetryMillis = 50;
 
 
 
     /**
      * 根据id查询商铺
-     * 缓存穿透：空值标记
+     * 缓存穿透：共享布隆过滤器与空值标记，未就绪或故障时放行
      * 缓存雪崩：ttl抖动
-     * 缓存击穿：互斥锁
+     * 缓存击穿：Redisson 同店锁，缓存发布原子校验所有权
      */
     @Override
     public Result<Shop> queryById(Long id) {
         if (id == null || id <= 0) {
             return Result.error("商户ID非法");
         }
-        //构造缓存key和锁key
-        String cacheKey =
-                RedisConstants.SHOP_CACHE_KEY + id;
-
-        String lockKey =
-                RedisConstants.LOCK_SHOP_KEY + id;
-
-        // 第一次查缓存
-        CacheResult<Shop> cached =
-                cacheClient.get(cacheKey, Shop.class);
-        //命中了就直接返回
-        if (cached.state() == CacheState.HIT) {
-            return Result.success(cached.value());
-        }
-
-        if (cached.state() == CacheState.NOT_FOUND) {
-            return Result.error("商户不存在");
-        }
-        //未命中就开始等待并重试，这里设置最大重试次数为5
-        for (int attempt = 0; attempt < 5; attempt++) {
-            String token = tryLock(lockKey);
-
-            if (token == null) {
-                if (!sleepBeforeRetry(attempt)) {
-                    return Result.error("请求被中断");
-                }
-
-                // 等待期间其他线程可能已经写好缓存
-                CacheResult<Shop> retryCache =
-                        cacheClient.get(cacheKey, Shop.class);
-
-                if (retryCache.state() == CacheState.HIT) {
-                    return Result.success(retryCache.value());
-                }
-
-                if (retryCache.state() == CacheState.NOT_FOUND) {
-                    return Result.error("商户不存在");
-                }
-
-                continue;
+        String cacheKey = RedisConstants.SHOP_CACHE_KEY + id;
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(cacheWaitMillis);
+        while (true) {
+            CacheResult<Shop> cached = cacheClient.get(cacheKey, Shop.class);
+            if (cached.state() == CacheState.HIT) return Result.success(cached.value());
+            if (cached.state() == CacheState.NOT_FOUND || protection.isNotFound(id)
+                    || !protection.mayExist(id)) return Result.error("商户不存在");
+            ShopCacheProtection.Lease lease;
+            try { lease = protection.tryLock(id, Duration.ZERO); }
+            catch (ShopCacheAccessException unavailable) {
+                // 无法可靠持锁时仅实时读取，不发布可能与新增或删除冲突的缓存。
+                Shop live = getById(id);
+                return live == null ? Result.error("商户不存在") : Result.success(live);
             }
-
-            try {
-                // 获得锁后的 double-check
-                CacheResult<Shop> secondCache =
-                        cacheClient.get(cacheKey, Shop.class);
-
-                if (secondCache.state() == CacheState.HIT) {
-                    return Result.success(secondCache.value());
+            if (lease != null) {
+                try (lease) {
+                    CacheResult<Shop> second = cacheClient.get(cacheKey, Shop.class);
+                    if (second.state() == CacheState.HIT) return Result.success(second.value());
+                    if (second.state() == CacheState.NOT_FOUND || protection.isNotFound(id))
+                        return Result.error("商户不存在");
+                    Shop shop = getById(id);
+                    try {
+                        if (shop == null) protection.markNotFound(id);
+                        else protection.publish(id, cacheKey, objectMapper.writeValueAsString(shop),
+                                RedisConstants.SHOP_CACHE_TTL.plusSeconds(ThreadLocalRandom.current().nextLong(-180, 181)));
+                    } catch (ShopCacheAccessException | com.fasterxml.jackson.core.JsonProcessingException failure) {
+                        log.warn("店铺缓存写入失败，保留实时结果，shopId={}", id, failure);
+                    }
+                    return shop == null ? Result.error("商户不存在") : Result.success(shop);
                 }
-
-                if (secondCache.state() == CacheState.NOT_FOUND) {
-                    return Result.error("商户不存在");
-                }
-
-                Shop shop = getById(id);
-
-                if (shop == null) {
-                    cacheClient.setNotFound(
-                            cacheKey,
-                            RedisConstants.CACHE_NULL_TTL
-                    );
-                    return Result.error("商户不存在");
-                }
-
-                cacheClient.set(
-                        cacheKey,
-                        shop,
-                        RedisConstants.SHOP_CACHE_TTL
-                );
-
-                return Result.success(shop);
-            } finally {
-                unlock(lockKey, token);
+            }
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) return Result.error("系统繁忙，请稍后重试");
+            try { TimeUnit.NANOSECONDS.sleep(Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(Math.max(1, cacheRetryMillis)))); }
+            catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return Result.error("请求被中断");
             }
         }
-
-        //直接返回降级结果
-        return Result.error("系统繁忙，请稍后重试");
     }
 
 
@@ -181,28 +148,64 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         return Result.success() ;
     }
 
+    /** 新增店铺，在事务提交前追加过滤器并清理两个入口的空值标记。 */
     @Override
     @Transactional
     public boolean save(Shop shop) {
-        // 新店铺尚无评价，汇总字段由评价模块从零开始维护。
         shop.setScore(0);
         shop.setComments(0);
-        boolean saved = super.save(shop);
-        if (saved) {
+        if (!super.save(shop)) return false;
+        ShopCacheProtection.Lease lease = requireWriteLock(shop.getId());
+        boolean deferred = releaseAfterTransaction(lease);
+        try {
+            protection.add(shop.getId());
+            protection.evict(shop.getId());
             syncGeo(null, shop);
+            lease.verifyOwnership();
+            return true;
+        } finally {
+            if (!deferred) lease.close();
         }
-        return saved;
     }
 
+    /** 删除与回源共用同店锁，避免旧查询在清理后重新写回缓存。 */
     @Override
     @Transactional
     public boolean removeById(Serializable id) {
-        Shop existing = getById(id);
-        boolean removed = super.removeById(id);
-        if (removed) {
-            syncGeo(existing, null);
+        Long shopId = Long.valueOf(id.toString());
+        ShopCacheProtection.Lease lease = requireWriteLock(shopId);
+        boolean deferred = releaseAfterTransaction(lease);
+        try {
+            Shop existing = getById(id);
+            boolean removed = super.removeById(id);
+            if (removed) {
+                protection.evict(shopId);
+                syncGeo(existing, null);
+            }
+            lease.verifyOwnership();
+            return removed;
+        } finally {
+            if (!deferred) lease.close();
         }
-        return removed;
+    }
+
+    /** 写操作等待预算耗尽或 Redis 故障时抛异常，使数据库事务回滚。 */
+    private ShopCacheProtection.Lease requireWriteLock(Long shopId) {
+        var lease = protection.tryLock(shopId, Duration.ofMillis(Math.max(0, cacheWaitMillis)));
+        if (lease == null) throw new ShopCacheAccessException("店铺正在更新，请稍后重试", null);
+        return lease;
+    }
+
+    /** 事务提交前复核所有权，实际提交或回滚完成后才由持锁线程释放。 */
+    private boolean releaseAfterTransaction(ShopCacheProtection.Lease lease) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return false;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            /** 在数据库提交前拒绝已失去锁的写事务。 */
+            @Override public void beforeCommit(boolean readOnly) { lease.verifyOwnership(); }
+            /** 数据库事务结束后释放，不在业务方法返回时提前释放。 */
+            @Override public void afterCompletion(int status) { lease.close(); }
+        });
+        return true;
     }
 
     /**
@@ -334,77 +337,4 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
     
 
 
-    //尝试获取锁
-    //TODO 后续补充LUA脚本或者成熟的分布式锁实现比如Redisson
-    private String tryLock(String lockKey){
-        //给锁加一个唯一的标识防止误删
-        String token = UUID.randomUUID().toString() ;
-
-        try{
-            boolean acquired = stringRedisTemplate.opsForValue().setIfAbsent(
-                    lockKey , token ,
-                    Duration.ofSeconds(RedisConstants.LOCK_SHOP_TTL));
-            return Boolean.TRUE.equals(acquired) ? token : null ;
-        }catch(DataAccessException e){
-            log.warn("获取分布式锁失败,lockKey = {}" , lockKey , e) ;
-            return null ;
-        }
-    }
-    //释放锁
-    //Lua脚本执行原子删除
-    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
-            new DefaultRedisScript<>(
-                    """
-                    if redis.call('get', KEYS[1]) == ARGV[1] then
-                        return redis.call('del', KEYS[1])
-                    end
-                    return 0
-                    """,
-                    Long.class
-            );
-    private boolean unlock(String lockKey, String token) {
-        if (token == null) {
-            return false;
-        }
-
-        try {
-            Long result = stringRedisTemplate.execute(
-                    UNLOCK_SCRIPT,
-                    Collections.singletonList(lockKey),
-                    token
-            );
-
-            return Long.valueOf(1L).equals(result);
-        } catch (DataAccessException e) {
-            log.warn(
-                    "释放分布式锁失败，lockKey={}",
-                    lockKey,
-                    e
-            );
-            return false;
-        }
-    }
-
-    //没抢到锁时线程休眠，加入指数退避和随机抖动
-    private boolean sleepBeforeRetry(int attempt) {
-        try {
-            // 20、40、80、160、320 毫秒附近随机等待
-            long maxDelay = Math.min(
-                    300L,
-                    20L * (1L << attempt)
-            );
-
-            long minDelay = Math.max(10L, maxDelay / 2);
-
-            long delay = ThreadLocalRandom.current()
-                    .nextLong(minDelay, maxDelay + 1);
-
-            Thread.sleep(delay);
-            return true;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.debug("缓存重建等待被中断");
-            return false;
-        }
-    }
 }

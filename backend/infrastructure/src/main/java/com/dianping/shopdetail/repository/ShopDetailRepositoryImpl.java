@@ -1,7 +1,8 @@
 package com.dianping.shopdetail.repository;
 
-import com.dianping.shopdetail.enums.ReviewTag;
-import com.dianping.shopdetail.model.*;
+import com.dianping.shop.shopdetail.enums.ReviewTag;
+import com.dianping.shop.shopdetail.model.*;
+import com.dianping.shop.shopdetail.repository.ShopDetailRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;

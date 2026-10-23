@@ -2,8 +2,9 @@ package com.dianping.shop.shopdetail.task;
 
 import com.dianping.shared.taskchain.enums.NodeExecutionStatus;
 import com.dianping.shared.taskchain.model.TaskContext;
+import com.dianping.shop.shopdetail.model.ShopBaseInfo;
+import com.dianping.shop.shopdetail.model.ShopDetailAggregate;
 import com.dianping.shop.shopdetail.model.result.SectionResult;
-import com.dianping.shopdetail.model.*;
 import java.time.LocalDateTime;
 import java.util.*;
 

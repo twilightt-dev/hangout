@@ -1,8 +1,9 @@
 package com.dianping.shopdetail.repository;
 
-import com.dianping.shopdetail.exception.DuplicateRecommendDishException;
-import com.dianping.shopdetail.model.RecommendDish;
-import com.dianping.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.exception.DuplicateRecommendDishException;
+import com.dianping.shop.shopdetail.model.RecommendDish;
+import com.dianping.shop.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.repository.RecommendDishRepository;
 import org.springframework.transaction.annotation.*;
 import com.dianping.shopdetail.persistence.mapper.RecommendDishMapper;
 import org.springframework.dao.DuplicateKeyException;

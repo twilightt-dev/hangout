@@ -1,5 +1,7 @@
 package com.dianping.shopdetail.repository;
-import com.dianping.shopdetail.model.*;
+import com.dianping.shop.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.model.ShopVoucher;
+import com.dianping.shop.shopdetail.repository.ShopVoucherRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.*;

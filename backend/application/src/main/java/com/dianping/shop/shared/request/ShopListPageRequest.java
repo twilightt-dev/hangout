@@ -1,6 +1,6 @@
 package com.dianping.shop.shared.request;
 
-import com.dianping.shopdetail.exception.ShopDetailException;
+import com.dianping.shop.shopdetail.exception.ShopDetailException;
 
 /**
  * 店铺各业务列表共享的分页请求，用于独立查看更多接口，不作为商详首屏请求。

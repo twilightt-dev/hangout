@@ -1,6 +1,6 @@
 package com.dianping.shop.review.model.request;
 
-import com.dianping.shopdetail.exception.ShopReviewException;
+import com.dianping.shop.shopdetail.exception.ShopReviewException;
 
 /**
  * 当前业务的数据传输模型。

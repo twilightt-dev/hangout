@@ -1,6 +1,6 @@
 package com.dianping.shop.recommend.model.request;
 
-import com.dianping.shopdetail.exception.RecommendDishException;
+import com.dianping.shop.shopdetail.exception.RecommendDishException;
 
 /**
  * 商详预览可取 6 条，独立浏览默认每页 12 条。
