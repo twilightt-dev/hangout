@@ -1,8 +1,9 @@
 package com.dianping.shopdetail.repository;
 
-import com.dianping.shopdetail.model.ShopSetmeal;
-import com.dianping.shopdetail.model.ShopSetmealItem;
-import com.dianping.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.model.ShopSetmeal;
+import com.dianping.shop.shopdetail.model.ShopSetmealItem;
+import com.dianping.shop.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.repository.ShopSetmealRepository;
 import org.springframework.transaction.annotation.*;
 import com.dianping.shopdetail.persistence.mapper.ShopSetmealMapper;
 import org.springframework.stereotype.Repository;

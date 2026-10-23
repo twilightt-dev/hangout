@@ -3,9 +3,9 @@ package com.dianping.shop.shopdetail.task;
 import com.dianping.shared.taskchain.annotation.TaskNode;
 import com.dianping.shared.taskchain.enums.*;
 import com.dianping.shared.taskchain.model.*;
+import com.dianping.shop.shopdetail.model.ShopDetailAggregate;
 import com.dianping.shop.shopdetail.model.result.SectionResult;
-import com.dianping.shopdetail.model.*;
-import com.dianping.shopdetail.service.ShopDetailDomainService;
+import com.dianping.shop.shopdetail.service.ShopDetailDomainService;
 import org.springframework.stereotype.Component;
 
 /**

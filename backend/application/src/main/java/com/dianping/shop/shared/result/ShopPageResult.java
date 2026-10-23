@@ -1,6 +1,6 @@
 package com.dianping.shop.shared.result;
 
-import com.dianping.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.model.ShopPage;
 import java.util.List;
 import java.util.function.Function;
 

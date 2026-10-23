@@ -3,8 +3,9 @@ package com.dianping.shop.setmeal.service;
 import com.dianping.shop.setmeal.model.result.ShopSetmealResult;
 import com.dianping.shop.shared.request.ShopListPageRequest;
 import com.dianping.shop.shared.result.ShopPageResult;
-import com.dianping.shopdetail.exception.ShopSetmealException;
-import com.dianping.shopdetail.repository.ShopSetmealRepository;
+import com.dianping.shop.shopdetail.exception.ShopSetmealException;
+import com.dianping.shop.shopdetail.model.ShopPage;
+import com.dianping.shop.shopdetail.repository.ShopSetmealRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -62,7 +63,7 @@ public class ShopSetmealApplicationService {
             ShopListPageRequest request) {
         return read.execute(status -> {
             if (!repository.shopExists(request.shopId())) throw new ShopSetmealException(404, "店铺不存在");
-            var page = new com.dianping.shopdetail.model.ShopPage<>(
+            var page = new ShopPage<>(
                     repository.pagePublished(request.shopId(), request.offset(), request.size()),
                     repository.countPublished(request.shopId()), request.current(), request.size());
             return ShopPageResult.from(page, ShopSetmealResult::from);

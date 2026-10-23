@@ -1,5 +1,6 @@
 package com.dianping.shopdetail.cache;
 
+import com.dianping.shop.cache.ShopCacheProtection;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheCoordinator;
 import java.time.Clock;
@@ -32,7 +33,8 @@ public class ShopDetailCacheConfiguration {
 
     /**
      * 创建带逻辑过期、物理 TTL 和冷启动等待配置的协调器，锁由看门狗续期。
-     * @param cache Redis 快照与锁适配器
+     * @param cache Redis 快照读写适配器
+     * @param protection 与旧详情入口及写操作共享的缓存保护端口
      * @param executor 有界后台刷新执行器
      * @param logicalTtl 逻辑有效期，默认 35 分钟
      * @param physicalTtl 物理 TTL 上限，默认 60 分钟
@@ -43,13 +45,14 @@ public class ShopDetailCacheConfiguration {
      */
     @Bean
     public ShopDetailCacheCoordinator<ShopDetailResult> shopDetailCacheCoordinator(RedisShopDetailCache cache,
+            ShopCacheProtection protection,
             @Qualifier("shopDetailRefreshExecutor") Executor executor,
             @Value("${shop-detail.cache-logical-ttl-ms:2100000}") long logicalTtl,
             @Value("${shop-detail.cache-physical-ttl-ms:3600000}") long physicalTtl,
             @Value("${shop-detail.cache-physical-ttl-jitter-ms:300000}") long physicalTtlJitter,
             @Value("${shop-cache.lock-wait-ms:2000}") long waitTimeout,
             @Value("${shop-cache.lock-retry-ms:50}") long waitInterval) {
-        return new ShopDetailCacheCoordinator<>(cache, executor, Clock.systemUTC(), Duration.ofMillis(logicalTtl),
+        return new ShopDetailCacheCoordinator<>(cache, protection, executor, Clock.systemUTC(), Duration.ofMillis(logicalTtl),
                 Duration.ofMillis(physicalTtl), Duration.ofMillis(physicalTtlJitter),
                 Duration.ofMillis(waitTimeout), Duration.ofMillis(waitInterval));
     }

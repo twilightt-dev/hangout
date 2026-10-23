@@ -4,7 +4,7 @@ import com.dianping.shop.recommend.model.result.RecommendDishItem;
 import com.dianping.shop.review.model.result.ShopReviewItem;
 import com.dianping.shop.setmeal.model.result.ShopSetmealResult;
 import com.dianping.shop.shared.result.ShopPageResult;
-import com.dianping.shopdetail.model.*;
+import com.dianping.shop.shopdetail.model.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;

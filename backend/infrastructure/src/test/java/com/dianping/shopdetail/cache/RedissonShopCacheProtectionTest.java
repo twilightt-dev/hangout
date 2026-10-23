@@ -1,9 +1,9 @@
 package com.dianping.shopdetail.cache;
 
-import com.dianping.shared.cache.ShopCacheAccessException;
-import com.dianping.shared.cache.ShopCacheProtection;
+import com.dianping.shop.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheProtection;
 import java.time.Duration;
-import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.*;

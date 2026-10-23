@@ -1,7 +1,8 @@
 package com.dianping.exception;
-import com.dianping.shared.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheAccessException;
 
 import com.dianping.result.Result;
+import com.dianping.shop.shopdetail.exception.*;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -16,11 +17,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
-import com.dianping.shopdetail.exception.ShopReviewException;
-import com.dianping.shopdetail.exception.ShopSetmealException;
-import com.dianping.shopdetail.exception.ShopReviewException;
-import com.dianping.shopdetail.exception.ShopSetmealException;
-import com.dianping.shopdetail.exception.RecommendDishException;
 
 @Slf4j
 @RestControllerAdvice
@@ -33,8 +29,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(503).body(Result.error("店铺暂时不可用，请稍后重试"));
     }
 
-    @ExceptionHandler(com.dianping.shopdetail.exception.ShopDetailException.class)
-    public ResponseEntity<Result<Void>> handleShopDetailException(com.dianping.shopdetail.exception.ShopDetailException exception) {
+    @ExceptionHandler(ShopDetailException.class)
+    public ResponseEntity<Result<Void>> handleShopDetailException(ShopDetailException exception) {
         if (exception.status() >= 500) log.warn("商详查询失败", exception);
         return ResponseEntity.status(exception.status()).body(Result.error(exception.getMessage()));
     }

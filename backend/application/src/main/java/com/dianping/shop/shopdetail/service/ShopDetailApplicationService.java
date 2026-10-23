@@ -1,8 +1,8 @@
 package com.dianping.shop.shopdetail.service;
 
 import com.dianping.shared.taskchain.enums.*;
-import com.dianping.shared.cache.ShopCacheAccessException;
-import com.dianping.shared.cache.ShopCacheProtection;
+import com.dianping.shop.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheProtection;
 import com.dianping.shared.taskchain.model.PhaseConfig;
 import com.dianping.shared.taskchain.service.TaskChainEngine;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult;
@@ -13,9 +13,9 @@ import com.dianping.shop.shared.result.ShopPageResult;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult.BlogItem;
 import com.dianping.shop.shopdetail.task.ShopDetailTaskContext;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheCoordinator;
-import com.dianping.shopdetail.exception.ShopDetailException;
-import com.dianping.shopdetail.model.ShopDetailAggregate;
-import com.dianping.shopdetail.service.ShopDetailDomainService;
+import com.dianping.shop.shopdetail.exception.ShopDetailException;
+import com.dianping.shop.shopdetail.model.ShopDetailAggregate;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
@@ -57,6 +57,7 @@ public class ShopDetailApplicationService {
     /** 关闭公共快照缓存时仍需保护商详入口，不让开关绕过防穿透。 */
     @Autowired(required = false)
     private ShopCacheProtection protection;
+
     /** 缓存关闭时仍沿用同一份前台等待预算。 */
     @Value("${shop-cache.lock-wait-ms:2000}")
     private long protectionWaitMillis = 2000;
@@ -118,49 +119,48 @@ public class ShopDetailApplicationService {
             //补齐个人状态
             return attachRequestData(snapshot, shopId, viewerId);
         }
+        //实时查询
         return loadWithProtection(shopId, viewerId);
     }
 
     /** 关闭公共快照时仍检查存在性并按同店互斥回源；锁不可用则仅实时查询。 */
     private ShopDetailResult loadWithProtection(Long shopId, Long viewerId) {
         if (protection != null) {
+            //用布隆过滤器+空值标记拦截不存在的店铺
             if (protection.isNotFound(shopId) || !protection.mayExist(shopId))
                 throw new ShopDetailException(404, "店铺不存在");
             ShopCacheProtection.Lease lease;
-            try { lease = protection.tryLock(shopId, Duration.ofMillis(protectionWaitMillis)); }
-            catch (ShopCacheAccessException failure) { return loadUncached(shopId, viewerId); }
+            //获取重建锁
+            try {
+                lease = protection.tryLock(shopId, Duration.ofMillis(protectionWaitMillis));
+            }//获取锁失败就降级走实时查询
+            catch (ShopCacheAccessException failure) {
+                return loadUncached(shopId, viewerId);
+            }
+            //503表示服务异常
             if (lease == null) throw new ShopDetailException(503, "商详暂时不可用，请稍后重试");
+            //try-with-resources自动释放锁
             try (lease) {
+                //double-check，确认不存在就返回404
                 if (protection.isNotFound(shopId)) throw new ShopDetailException(404, "店铺不存在");
-                try { return loadUncached(shopId, viewerId); }
+                try {
+                    //实时查询
+                    return loadUncached(shopId, viewerId);
+                }
                 catch (ShopDetailException failure) {
                     if (failure.status() == 404) {
-                        try { protection.markNotFound(shopId); }
+                        try {
+                            protection.markNotFound(shopId);
+                        }
                         catch (ShopCacheAccessException ignored) { /* 不改变已确认的不存在结果。 */ }
                     }
                     throw failure;
                 }
             }
         }
+        //没装配保护服务就直接实时查询
         return loadUncached(shopId, viewerId);
     }
-
-    /**
-     * 强制重建一间店铺的公共商详快照，供定时任务调用。
-     * @param shopId 店铺标识
-     * @return 是否取得重建锁并成功写入
-     */
-    public boolean warmShop(Long shopId) {
-        if (cache == null || !cacheEnabled) return false;
-        if (shopId == null || shopId <= 0) throw new IllegalArgumentException("店铺 ID 必须为正整数");
-        return cache.refresh(shopId, () -> publicSnapshot(loadUncached(shopId, null, false)));
-    }
-
-    /**
-     * 取得当前店铺 ID 列表，供 job 层按稳定顺序全量预热。
-     * @return 当前全部店铺标识
-     */
-    public List<Long> allShopIds() { return domain.allShopIds(); }
 
     private ShopDetailResult loadUncached(Long shopId, Long viewerId) {
         return loadUncached(shopId, viewerId, true);
@@ -192,6 +192,25 @@ public class ShopDetailApplicationService {
         }
         return ShopDetailResult.from(detail);
     }
+
+
+    /**
+     * 强制重建一间店铺的公共商详快照，供定时任务调用。
+     * @param shopId 店铺标识
+     * @return 是否取得重建锁并成功写入
+     */
+    public boolean warmShop(Long shopId) {
+        if (cache == null || !cacheEnabled) return false;
+        if (shopId == null || shopId <= 0) throw new IllegalArgumentException("店铺 ID 必须为正整数");
+        return cache.refresh(shopId, () -> publicSnapshot(loadUncached(shopId, null, false)));
+    }
+
+    /**
+     * 取得当前店铺 ID 列表，供 job 层按稳定顺序全量预热。
+     * @return 当前全部店铺标识
+     */
+    public List<Long> allShopIds() { return domain.allShopIds(); }
+
 
     /**
      * 将查询到的商详结果封装为公共快照

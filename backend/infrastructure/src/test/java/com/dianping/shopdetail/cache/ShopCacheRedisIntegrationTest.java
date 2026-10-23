@@ -1,6 +1,6 @@
 package com.dianping.shopdetail.cache;
 
-import com.dianping.shared.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheAccessException;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;

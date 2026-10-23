@@ -1,8 +1,8 @@
 package com.dianping.service.impl;
 
 import com.dianping.cache.CacheClient;
-import com.dianping.shared.cache.ShopCacheProtection;
-import com.dianping.shared.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheProtection;
+import com.dianping.shop.cache.ShopCacheAccessException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;

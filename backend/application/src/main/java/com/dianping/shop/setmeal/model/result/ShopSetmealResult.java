@@ -1,7 +1,7 @@
 package com.dianping.shop.setmeal.model.result;
 
-import com.dianping.shopdetail.model.ShopSetmeal;
-import com.dianping.shopdetail.model.ShopSetmealItem;
+import com.dianping.shop.shopdetail.model.ShopSetmeal;
+import com.dianping.shop.shopdetail.model.ShopSetmealItem;
 import java.util.List;
 
 /**

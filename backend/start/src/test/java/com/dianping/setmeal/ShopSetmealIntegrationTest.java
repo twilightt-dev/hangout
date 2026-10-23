@@ -6,6 +6,9 @@ import com.dianping.config.MapperConfiguration;
 import com.dianping.config.SecurityConfig;
 import com.dianping.exception.GlobalExceptionHandler;
 import com.dianping.filter.JwtAuthenticationFilter;
+import com.dianping.shop.shopdetail.model.ShopSetmeal;
+import com.dianping.shop.shopdetail.model.ShopSetmealItem;
+import com.dianping.shop.shopdetail.repository.ShopSetmealRepository;
 import jakarta.servlet.FilterChain;
 import java.sql.SQLException;
 import java.util.UUID;
@@ -142,14 +145,14 @@ class ShopSetmealIntegrationTest {
 
     @Test
     void repositoryFiltersByShopAndStatusAndKeepsStableSetmealAndItemOrder() {
-        var repository = context.getBean(com.dianping.shopdetail.repository.ShopSetmealRepository.class);
+        var repository = context.getBean(ShopSetmealRepository.class);
         jdbc.update("INSERT INTO tb_shop VALUES(201),(202)");
         jdbc.update("INSERT INTO tb_shop_setmeal(id,shop_id,name,cover_image,price,people,rules,status,sort) VALUES(201,201,'次序二','/meal.png',9900,2,'规则',1,2),(202,201,'同序靠前','/meal.png',9900,2,'规则',1,1),(203,201,'同序靠后','/meal.png',9900,2,'规则',1,1),(204,201,'下架','/meal.png',9900,2,'规则',0,0),(205,202,'其他店','/meal.png',9900,2,'规则',1,0)");
         jdbc.update("INSERT INTO tb_shop_setmeal_item(id,setmeal_id,name,quantity,unit,sort) VALUES(201,201,'菜品',1,'份',0),(202,202,'主菜',1.5,'份',1),(203,202,'饮料',2,'杯',0),(204,203,'配菜',1,'份',0),(205,204,'下架菜品',1,'份',0),(206,205,'其他店菜品',1,'份',0)");
 
         var meals = repository.findPublishedByShopId(201L);
-        assertThat(meals).extracting(com.dianping.shopdetail.model.ShopSetmeal::id).containsExactly(202L, 203L, 201L);
-        assertThat(meals.getFirst().items()).extracting(com.dianping.shopdetail.model.ShopSetmealItem::name)
+        assertThat(meals).extracting(ShopSetmeal::id).containsExactly(202L, 203L, 201L);
+        assertThat(meals.getFirst().items()).extracting(ShopSetmealItem::name)
                 .containsExactly("饮料", "主菜");
         assertThat(meals.getFirst().items().getLast().quantity()).isEqualByComparingTo("1.5");
     }

@@ -44,7 +44,7 @@ mvn -f D:/devprojects/java-projects/comment/backend/pom.xml -pl start -am -Dlega
 
 九模块整理已保留；评论试点已撤回，当前评论创建、查询和点赞统一走传统 Service，只有入口与定时调度位于 controller/job。默认外部测试开关未开启时会跳过外部环境用例。H2 使用 MySQL 兼容模式验证实际 SQL 和事务，不能替代真实 MySQL 锁/隔离行为或 Redis 集成验证。DDD 迁移阶段未开启外部环境测试；后续点赞实施已单独运行真实隔离 Redis 测试。
 
-其他服务内已有 `Scheduled`、`PostConstruct` 及秒杀消费逻辑暂留 service，不重复装配；FeedTaskWorker 在 job 单份装配。九模块与评论试点验收后允许开发新功能，仍按需迁移旧业务，不包含任务引擎、保障申诉或 MQ。依赖图及下一个业务迁移步骤见 [DDD 架构](DDD.md)。
+其他服务内已有 `Scheduled`、`PostConstruct` 及秒杀消费逻辑暂留 service，不重复装配；FeedTaskWorker 在 job 单份装配。九模块与评论试点验收后允许开发新功能，仍按需迁移旧业务，不包含任务引擎、保障申诉或 MQ。依赖图及下一个业务迁移步骤见 [DDD 架构](../docs/DDD.md)。
 
 ## 评论点赞运行要求
 

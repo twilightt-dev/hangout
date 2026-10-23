@@ -1,9 +1,9 @@
 package com.dianping.shopdetail;
 
-import com.dianping.shopdetail.enums.ReviewTag;
-import com.dianping.shopdetail.model.TagEvidence;
-import com.dianping.shopdetail.service.ShopDetailDomainService;
-import com.dianping.shopdetail.repository.*;
+import com.dianping.shop.shopdetail.enums.ReviewTag;
+import com.dianping.shop.shopdetail.model.TagEvidence;
+import com.dianping.shop.shopdetail.repository.*;
+import com.dianping.shop.shopdetail.service.ShopDetailDomainService;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;

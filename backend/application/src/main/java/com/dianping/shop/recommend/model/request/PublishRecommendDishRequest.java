@@ -1,6 +1,6 @@
 package com.dianping.shop.recommend.model.request;
 
-import com.dianping.shopdetail.model.RecommendDish;
+import com.dianping.shop.shopdetail.model.RecommendDish;
 import java.time.LocalDateTime;
 
 /**

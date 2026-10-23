@@ -1,7 +1,8 @@
 package com.dianping.service.impl;
 
 import com.dianping.cache.CacheClient;
-import com.dianping.shared.cache.ShopCacheProtection;
+import com.dianping.shop.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheProtection;
 import java.time.Duration;
 import com.dianping.cache.CacheResult;
 import com.dianping.constant.RedisConstants;
@@ -91,10 +92,10 @@ class ShopServiceImplTest {
         when(mapper.insert(any(Shop.class))).thenReturn(1);
         var lease = mock(ShopCacheProtection.Lease.class);
         when(protection.tryLock(eq(301L), any())).thenReturn(lease);
-        doThrow(new com.dianping.shared.cache.ShopCacheAccessException("Redis 不可用", null))
+        doThrow(new ShopCacheAccessException("Redis 不可用", null))
                 .when(protection).add(301L);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.save(new Shop().setId(301L)))
-                .isInstanceOf(com.dianping.shared.cache.ShopCacheAccessException.class);
+                .isInstanceOf(ShopCacheAccessException.class);
         verify(protection, never()).evict(301L);
         verify(lease).close();
     }

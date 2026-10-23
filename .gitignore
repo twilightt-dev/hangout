@@ -7,9 +7,11 @@ backend/.project
 backend/.settings/
 
 
-#文档
-
+#开发文档
 /docs/
+
+#临时文档
+/.scratch/
 
 # Vue / Node
 frontend/node_modules/

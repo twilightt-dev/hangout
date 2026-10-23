@@ -1,6 +1,6 @@
 package com.dianping.shopdetail.cache;
 
-import com.dianping.shared.cache.ShopCacheProtection;
+import com.dianping.shop.cache.ShopCacheProtection;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheEntry;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheException;
 import com.dianping.shop.shopdetail.model.result.ShopDetailResult;
@@ -15,7 +15,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Redis 公共商详快照与 Redisson 同店锁适配器。
+ * Redis 公共商详快照读写适配器，负责序列化和逻辑过期时间存储。
+ * 发布仍通过共享保护端口原子校验锁所有权，锁的获取由应用协调器负责。
  */
 @Component
 public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
@@ -28,7 +29,7 @@ public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
      *
      * @param redis Redis 字符串模板
      * @param mapper JSON 序列化器
-     * @param protection 两入口共享的布隆过滤器、空值标记和同店协调器
+     * @param protection 发布时原子校验同店锁所有权，并清理共享不存在标记
      */
     public RedisShopDetailCache(StringRedisTemplate redis, ObjectMapper mapper, ShopCacheProtection protection) {
         this.redis = redis;
@@ -78,16 +79,6 @@ public class RedisShopDetailCache implements ShopDetailCache<ShopDetailResult> {
         }
     }
 
-    /** 两入口共享同一份已完整加载的布隆过滤器。 */
-    @Override public boolean mayExist(Long shopId) { return protection.mayExist(shopId); }
-    /** 读取共享空值标记，读取故障按未命中处理。 */
-    @Override public boolean isNotFound(Long shopId) { return protection.isNotFound(shopId); }
-    /** 明确查无店铺后，在同店锁内写入共享空值标记。 */
-    @Override public void markNotFound(Long shopId) { protection.markNotFound(shopId); }
-    /** 冷启动和后台刷新均尝试立即获取，等待由协调器控制。 */
-    @Override public ShopCacheProtection.Lease tryLock(Long shopId) {
-        return protection.tryLock(shopId, Duration.ZERO);
-    }
     /** 公共快照的稳定缓存键。 */
     private static String cacheKey(Long shopId) { return "cache:shop-detail:" + shopId; }
     /** 包装缓存访问故障，供应用层回退实时查询。 */

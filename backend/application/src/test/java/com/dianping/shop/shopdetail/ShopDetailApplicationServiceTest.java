@@ -3,6 +3,9 @@ package com.dianping.shop.shopdetail;
 import com.dianping.shared.taskchain.annotation.TaskNode;
 import com.dianping.shared.taskchain.model.*;
 import com.dianping.shared.taskchain.service.TaskChainEngine;
+import com.dianping.shop.shopdetail.enums.ReviewTag;
+import com.dianping.shop.shopdetail.model.*;
+import com.dianping.shop.shopdetail.repository.*;
 import com.dianping.shop.shopdetail.service.ShopDetailApplicationService;
 import com.dianping.shop.shopdetail.cache.ShopDetailCacheCoordinator;
 import com.dianping.shop.shopdetail.service.ShopDetailQueryService;
@@ -16,10 +19,8 @@ import com.dianping.shop.shopdetail.task.QueryShopBlogNode;
 import com.dianping.shop.shopdetail.task.QueryShopReviewNode;
 import com.dianping.shop.shopdetail.task.QueryShopSetmealNode;
 import com.dianping.shop.shopdetail.task.QueryShopVoucherNode;
-import com.dianping.shopdetail.exception.ShopDetailException;
-import com.dianping.shopdetail.model.*;
-import com.dianping.shopdetail.repository.*;
-import com.dianping.shopdetail.service.ShopDetailDomainService;
+import com.dianping.shop.shopdetail.exception.ShopDetailException;
+import com.dianping.shop.shopdetail.service.ShopDetailDomainService;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -121,7 +122,7 @@ class ShopDetailApplicationServiceTest {
      */
     private ShopDetailApplicationService service(long queryBudget, long postBudget) {
         var registry=new TaskNodeRegistry();
-        List<TaskNodeHandler<Long,ShopDetailAggregate>> handlers=List.of(
+        List<TaskNodeHandler<Long, ShopDetailAggregate>> handlers=List.of(
                 new QueryShopBaseNode(domain),new QueryShopVoucherNode(domain),new QueryShopSetmealNode(domain),
                 new QueryRecommendationNode(domain),new QueryShopReviewNode(domain),new QueryShopBlogNode(domain),
                 new AssembleShopDetailNode(),new EnrichShopDetailNode(domain));
@@ -146,7 +147,7 @@ class ShopDetailApplicationServiceTest {
         when(dishes.pageWithTotal(8L,1,6)).thenReturn(new ShopPage<>(List.of(dish),1,1,6));
         when(dishes.recommendedIds(99L,List.of(10L))).thenReturn(Set.of(10L));
         when(details.reviewEvidence(eq(8L),any(),eq(200))).thenReturn(List.of(
-                new TagEvidence(1L,List.of(com.dianping.shopdetail.enums.ReviewTag.TASTY),null)));
+                new TagEvidence(1L,List.of(ReviewTag.TASTY),null)));
         when(details.blogEvidence(eq(8L),any(),eq(50))).thenReturn(List.of(new TagEvidence(2L,List.of(),"味道好")));
         var synchronous = new ShopDetailApplicationService(null, domain, 2000, 1000);
         var result = synchronous.getShopDetail(8L, 99L);

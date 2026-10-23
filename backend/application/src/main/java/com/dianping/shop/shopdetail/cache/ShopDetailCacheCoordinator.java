@@ -1,10 +1,10 @@
 package com.dianping.shop.shopdetail.cache;
 
-import com.dianping.shopdetail.exception.ShopDetailException;
+import com.dianping.shop.cache.ShopCacheAccessException;
+import com.dianping.shop.cache.ShopCacheProtection;
+import com.dianping.shop.shopdetail.exception.ShopDetailException;
 import java.time.Clock;
 import java.time.Duration;
-import com.dianping.shared.cache.ShopCacheAccessException;
-import com.dianping.shared.cache.ShopCacheProtection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -14,13 +14,17 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /**
- * 缓存流程协调器，负责把读取缓存、获取重建锁回源数据库、异步刷新、失败降级组织成一套流程
+ * 统一编排公共快照的逻辑过期、物理 TTL 抖动、互斥回源、异步刷新和失败降级。
+ * 快照读写使用 ShopDetailCache，存在性判断、空值标记和同店锁直接使用 ShopCacheProtection。
  * @param <T> 缓存值的类型
  */
 public class ShopDetailCacheCoordinator<T> {
     private static final Log log = LogFactory.getLog(ShopDetailCacheCoordinator.class);
+
+    //本地异步刷新去重集合，redisson是分布式里防止多实例并发重建缓存
     private final Set<Long> scheduled = ConcurrentHashMap.newKeySet();
     private final ShopDetailCache<T> cache;
+    private final ShopCacheProtection protection;
     //后台执行异步刷新的执行器
     private final Executor refreshExecutor;
     //判断逻辑过期，计算新的逻辑过期时间
@@ -36,16 +40,18 @@ public class ShopDetailCacheCoordinator<T> {
 
 
     /** 创建不使用物理 TTL 抖动的协调器；锁续期由适配器管理。 */
-    public ShopDetailCacheCoordinator(ShopDetailCache<T> cache, Executor refreshExecutor, Clock clock,
+    public ShopDetailCacheCoordinator(ShopDetailCache<T> cache, ShopCacheProtection protection,
+            Executor refreshExecutor, Clock clock,
             Duration logicalTtl, Duration physicalTtl, Duration waitTimeout,
             Duration waitInterval) {
-        this(cache, refreshExecutor, clock, logicalTtl, physicalTtl, Duration.ZERO, waitTimeout,
+        this(cache, protection, refreshExecutor, clock, logicalTtl, physicalTtl, Duration.ZERO, waitTimeout,
                 waitInterval);
     }
 
     /**
      * 创建带物理 TTL 单向抖动的缓存协调器。
-     * @param cache 缓存和锁适配器
+     * @param cache 公共快照读写端口
+     * @param protection 两个详情入口共享的过滤器、空值标记和同店锁端口
      * @param refreshExecutor 有界后台刷新执行器
      * @param clock 当前时间源
      * @param logicalTtl 逻辑有效期
@@ -55,10 +61,12 @@ public class ShopDetailCacheCoordinator<T> {
      * @param waitTimeout 冷启动等待上限
      * @param waitInterval 冷启动重读间隔
      */
-    public ShopDetailCacheCoordinator(ShopDetailCache<T> cache, Executor refreshExecutor, Clock clock,
+    public ShopDetailCacheCoordinator(ShopDetailCache<T> cache, ShopCacheProtection protection,
+            Executor refreshExecutor, Clock clock,
             Duration logicalTtl, Duration physicalTtl, Duration physicalTtlJitter,
             Duration waitTimeout, Duration waitInterval) {
         this.cache = cache;
+        this.protection = protection;
         this.refreshExecutor = refreshExecutor;
         this.clock = clock;
         this.logicalTtl = positive(logicalTtl, "逻辑有效期");
@@ -93,7 +101,7 @@ public class ShopDetailCacheCoordinator<T> {
             //返回旧数据
             return entry.value();
         }
-        if (cache.isNotFound(shopId) || !cache.mayExist(shopId)) throw notFound();
+        if (protection.isNotFound(shopId) || !protection.mayExist(shopId)) throw notFound();
         // 缓存完全未命中时才检查存在性并互斥回源。
         return loadOnCacheMiss(shopId, loader);
     }
@@ -106,7 +114,7 @@ public class ShopDetailCacheCoordinator<T> {
      * @return 成功取得锁并完成重建时返回 true
      */
     public boolean refresh(Long shopId, Supplier<T> loader) {
-        try (var lease = cache.tryLock(shopId)) {
+        try (var lease = protection.tryLock(shopId, Duration.ZERO)) {
             if (lease == null) return false;
             loadAndStore(shopId, loader, true);
             return true;
@@ -115,7 +123,7 @@ public class ShopDetailCacheCoordinator<T> {
         }
     }
 
-    /** 在实际工作线程取得并释放同店锁，避免跨线程解锁与重复排队。 */
+    //异步刷新
     private void scheduleRefresh(Long shopId, Supplier<T> loader) {
         if (!scheduled.add(shopId)) return;
         try {
@@ -134,16 +142,18 @@ public class ShopDetailCacheCoordinator<T> {
         }
     }
 
-    /** 完全未命中时获取同店锁，二次检查；协调故障仅实时读取，不发布缓存。 */
+    //缓存未命中时重建缓存
     private T loadOnCacheMiss(Long shopId, Supplier<T> loader) {
         ShopCacheProtection.Lease lease;
         try {
-            lease = cache.tryLock(shopId);
+            lease = protection.tryLock(shopId, Duration.ZERO);
         } catch (ShopDetailCacheException | ShopCacheAccessException failure) {
             log.warn("商详锁不可用，执行不写缓存的实时查询，shopId=" + shopId, failure);
             return loader.get();
         }
+        //没抢到锁就等待重建
         if (lease == null) return awaitRebuild(shopId, loader);
+        //Lease实现了AutoCloseable接口，可以用try-with-resources写法
         try (lease) {
             ShopDetailCacheEntry<T> secondRead;
             try {
@@ -152,19 +162,27 @@ public class ShopDetailCacheCoordinator<T> {
                 return loader.get();
             }
             if (secondRead != null) return secondRead.value();
-            if (cache.isNotFound(shopId)) throw notFound();
+            //读到空值标记说明店铺不存在，直接返回404的业务异常即可
+            if (protection.isNotFound(shopId)) throw notFound();
+
             return loadAndStore(shopId, loader, false);
         }
     }
 
-    /** 仅数据库明确返回 404 时写空值，其他失败原样传播且不重复查询。 */
+    /**
+     * 回源数据库，并写缓存
+     * @param shopId 店铺表示
+     * @param loader 调用方传入的函数
+     * @param requirePublication 是否要求缓存写入
+     * @return 公共商详快照
+     */
     private T loadAndStore(Long shopId, Supplier<T> loader, boolean requirePublication) {
         T value;
         try {
             value = loader.get();
         } catch (ShopDetailException failure) {
             if (failure.status() == 404) {
-                try { cache.markNotFound(shopId); }
+                try { protection.markNotFound(shopId); }
                 catch (ShopDetailCacheException | ShopCacheAccessException unavailable) {
                     if (requirePublication) throw new ShopDetailCacheException("不存在标记写入失败", unavailable);
                     log.warn("不存在标记写入失败，shopId=" + shopId, unavailable);
@@ -186,6 +204,7 @@ public class ShopDetailCacheCoordinator<T> {
         return new ShopDetailException(404, "店铺不存在");
     }
 
+
     /**
      * 对于没拿到重建锁的请求，进行等待
      * @param shopId  店铺标识
@@ -203,7 +222,7 @@ public class ShopDetailCacheCoordinator<T> {
                 Thread.currentThread().interrupt();
                 throw unavailable();
             }
-            if (cache.isNotFound(shopId)) throw notFound();
+            if (protection.isNotFound(shopId)) throw notFound();
             ShopDetailCacheEntry<T> entry;
             try { entry = cache.get(shopId).orElse(null); }
             catch (ShopDetailCacheException failure) { return loader.get(); }

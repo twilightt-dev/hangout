@@ -1,5 +1,6 @@
 package com.dianping.shopdetail.model;
 
+import com.dianping.shop.shopdetail.model.ShopReview;
 import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.util.List;
